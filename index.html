@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clínica AMOT - Infiltrações</title>
+    <style>
+        /* --- DESIGN CLÍNICA AMOT (Ortopedia) --- */
+        
+        body { 
+            font-family: 'Segoe UI', 'Roboto', Helvetica, Arial, sans-serif; 
+            background-color: #f4f4f4; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            min-height: 100vh; 
+            margin: 0; 
+            color: #333;
+        }
+
+        .container { 
+            background-color: #ffffff; 
+            padding: 40px; 
+            border-radius: 12px; 
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1); 
+            width: 100%; 
+            max-width: 450px; 
+            border-top: 8px solid #d32f2f; /* Vermelho AMOT */
+        }
+
+        /* Área da Logo e Títulos */
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 20px;
+        }
+
+        .logo {
+            max-width: 180px; /* Tamanho máximo da logo */
+            height: auto;
+            display: block;
+            margin: 0 auto 15px auto;
+        }
+
+        h1 { 
+            color: #d32f2f; 
+            margin: 0; 
+            font-weight: 800;
+            font-size: 1.8rem;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-top: 5px;
+        }
+
+        /* Formulário */
+        label { 
+            display: block; 
+            margin-bottom: 8px; 
+            color: #333; 
+            font-weight: 700; 
+            font-size: 0.9rem;
+        }
+
+        input { 
+            width: 100%; 
+            padding: 12px; 
+            margin-bottom: 20px; 
+            border: 2px solid #eee; /* Borda mais grossa estilo técnico */
+            border-radius: 6px; 
+            box-sizing: border-box; 
+            transition: all 0.3s;
+            background-color: #fafafa;
+            font-size: 1rem;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #d32f2f;
+            background-color: #fff;
+        }
+
+        button { 
+            width: 100%; 
+            padding: 15px; 
+            background-color: #d32f2f; 
+            color: white; 
+            border: none; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            font-size: 16px; 
+            font-weight: 800; /* Letra mais grossa */
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: background-color 0.3s, transform 0.1s;
+            box-shadow: 0 4px 6px rgba(211, 47, 47, 0.2);
+        }
+
+        button:hover { 
+            background-color: #b71c1c; 
+        }
+
+        button:active {
+            transform: scale(0.98); 
+        }
+
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        .footer { 
+            text-align: center; 
+            margin-top: 25px; 
+            font-size: 11px; 
+            color: #888; 
+        }
+
+        .msg-sucesso { 
+            background-color: #e8f5e9;
+            color: #2e7d32; 
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center; 
+            display: none; 
+            margin-top: 20px; 
+            font-weight: bold;
+            border: 1px solid #c8e6c9;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        
+        <div class="header">
+            <img src="logo.png" alt="Logo Clínica AMOT" class="logo" onerror="this.style.display='none'">
+            
+            <h1>CLÍNICA AMOT</h1>
+            <div class="subtitle">ORTOPEDIA E TRAUMATOLOGIA</div>
+        </div>
+
+        <iframe name="hidden_iframe" style="display:none;"></iframe>
+        
+        <form id="formulario-infiltracao" 
+              method="POST" 
+              target="hidden_iframe"
+              action="https://script.google.com/macros/s/AKfycbxyRLKCZ3FgYxnAXcIh9UWTiI3O7h5E_T-OByImENX_Nisju-08MwDJir8gOMuy2o4Vdw/exec">
+            
+            <label>Nome do Paciente:</label>
+            <input type="text" name="paciente" placeholder="Nome completo do paciente" required>
+
+            <label>Convênio:</label>
+            <input type="text" name="convenio" placeholder="Ex: Unimed, Bradesco, Particular..." required>
+
+            <label>Data da Realização:</label>
+            <input type="date" name="data" required>
+
+            <label>Atendente (Recepção):</label>
+            <input type="text" name="atendente" placeholder="Quem autorizou a guia?" required>
+
+            <label>Executor (Médico/Enfermeiro):</label>
+            <input type="text" name="executor" placeholder="Quem realizou o procedimento?" required>
+
+            <button type="submit" id="btn-enviar">Registrar Infiltração</button>
+        </form>
+
+        <p class="msg-sucesso" id="msg-sucesso">✅ Guia registrada com sucesso!</p>
+
+        <div class="footer">
+            Sistema Interno de Controle de Infiltrações<br>
+            Uso exclusivo da equipe AMOT
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('formulario-infiltracao');
+        const msgSucesso = document.getElementById('msg-sucesso');
+        const btn = document.getElementById('btn-enviar');
+
+        form.addEventListener('submit', function() {
+            btn.disabled = true;
+            btn.innerHTML = "Enviando dados...";
+            
+            setTimeout(function() {
+                msgSucesso.style.display = "block";
+                btn.innerHTML = "Registrar Infiltração";
+                btn.disabled = false;
+                form.reset(); 
+                
+                setTimeout(() => { msgSucesso.style.display = "none"; }, 4000);
+            }, 1000);
+        });
+    </script>
+
+</body>
+</html>

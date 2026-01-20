@@ -2,205 +2,527 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Clínica AMOT - Infiltrações</title>
+    
+    <link rel="apple-touch-icon" href="logo.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
     <style>
-        /* --- DESIGN CLÍNICA AMOT (Ortopedia) --- */
-        
+        /* --- CONFIGURAÇÕES DE CORES --- */
+        :root {
+            --primary: #d32f2f; /* Vermelho AMOT */
+            --primary-dark: #b71c1c;
+            --bg-body: #f0f2f5;
+            --bg-card: #ffffff;
+            --text-main: #2c3e50;
+            --text-muted: #7f8c8d;
+            --border: #e0e0e0;
+            --input-bg: #ffffff;
+            --shadow: 0 10px 30px rgba(0,0,0,0.08);
+            --toast-bg: #333;
+        }
+
+        body.dark-mode {
+            --primary: #ff5252;
+            --primary-dark: #ff867c;
+            --bg-body: #121212;
+            --bg-card: #1e1e1e;
+            --text-main: #e0e0e0;
+            --text-muted: #a0a0a0;
+            --border: #333333;
+            --input-bg: #2d2d2d;
+            --shadow: 0 10px 30px rgba(0,0,0,0.5);
+            --toast-bg: #fff;
+        }
+
         body { 
-            font-family: 'Segoe UI', 'Roboto', Helvetica, Arial, sans-serif; 
-            background-color: #f4f4f4; 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            min-height: 100vh; 
+            font-family: 'Segoe UI', 'Roboto', sans-serif; 
+            background-color: var(--bg-body);
+            color: var(--text-main);
             margin: 0; 
-            color: #333;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: background-color 0.3s ease;
+            padding: 20px;
+            touch-action: manipulation;
+            position: relative;
+            overflow-x: hidden; /* Evita barra de rolagem horizontal */
+        }
+
+        /* --- LOGO DE FUNDO (MARCA D'ÁGUA) --- */
+        body::before {
+            content: "";
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 500px; /* Tamanho da logo de fundo */
+            height: 500px;
+            background-image: url('logo.png'); /* Sua imagem logo.png */
+            background-repeat: no-repeat;
+            background-position: center;
+            background-size: contain;
+            opacity: 0.04; /* Bem transparente para não atrapalhar */
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        /* --- EFEITO CHUVA DE PONTOS --- */
+        #rain-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0; /* Atrás do formulário, na frente do fundo */
+            overflow: hidden;
+        }
+
+        .drop {
+            position: absolute;
+            background-color: var(--primary); /* Usa o vermelho do tema */
+            border-radius: 50%;
+            opacity: 0.4;
+            top: -10px;
+            animation: fall linear forwards;
+        }
+
+        @keyframes fall {
+            to { transform: translateY(110vh); }
+        }
+
+        .theme-toggle {
+            position: absolute; top: 20px; right: 20px;
+            background: var(--bg-card); border: 1px solid var(--border);
+            padding: 10px; border-radius: 50%; cursor: pointer;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); color: var(--text-main);
+            transition: all 0.3s;
+            z-index: 20; /* Acima da chuva */
         }
 
         .container { 
-            background-color: #ffffff; 
+            background-color: var(--bg-card); 
             padding: 40px; 
-            border-radius: 12px; 
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1); 
+            border-radius: 20px; 
+            box-shadow: var(--shadow); 
             width: 100%; 
-            max-width: 450px; 
-            border-top: 8px solid #d32f2f; /* Vermelho AMOT */
+            max-width: 500px; 
+            border-top: 6px solid var(--primary);
+            transition: background-color 0.3s ease;
+            position: relative;
+            z-index: 10; /* Garante que o formulário fica na frente da chuva */
         }
 
-        /* Área da Logo e Títulos */
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-            border-bottom: 2px solid #f0f0f0;
-            padding-bottom: 20px;
+        .header { text-align: center; margin-bottom: 25px; }
+        .logo { max-width: 130px; margin-bottom: 15px; }
+        
+        h1 { color: var(--primary); margin: 0; font-size: 1.6rem; text-transform: uppercase; letter-spacing: 1px; }
+        .subtitle { color: var(--text-muted); font-size: 0.8rem; font-weight: 700; letter-spacing: 2px; margin-top: 8px; }
+
+        .tabs { display: flex; gap: 10px; margin-bottom: 25px; }
+        .tab-btn {
+            flex: 1; padding: 10px; border: none; background: transparent;
+            border-bottom: 3px solid transparent; color: var(--text-muted);
+            cursor: pointer; font-weight: bold; transition: all 0.3s;
+        }
+        .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+        .input-group { margin-bottom: 20px; position: relative; }
+        
+        label { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-weight: 600; font-size: 0.9rem; color: var(--text-main); }
+        label i { color: var(--primary); }
+
+        input, select { 
+            width: 100%; padding: 14px 15px; border: 2px solid var(--border);
+            border-radius: 10px; box-sizing: border-box; font-size: 1rem; 
+            background-color: var(--input-bg); color: var(--text-main);
+            transition: border-color 0.3s;
         }
 
-        .logo {
-            max-width: 180px; /* Tamanho máximo da logo */
-            height: auto;
-            display: block;
-            margin: 0 auto 15px auto;
+        select {
+            cursor: pointer; appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237f8c8d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat; background-position: right 15px center; background-size: 15px;
         }
 
-        h1 { 
-            color: #d32f2f; 
-            margin: 0; 
-            font-weight: 800;
-            font-size: 1.8rem;
-            letter-spacing: 1px;
-            text-transform: uppercase;
+        input:focus, select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 4px rgba(211, 47, 47, 0.1); }
+        input.input-erro, select.input-erro { border-color: #ff5252 !important; animation: shake 0.3s; }
+
+        @keyframes shake { 0%, 100% {transform: translateX(0);} 25% {transform: translateX(-5px);} 75% {transform: translateX(5px);} }
+
+        button.btn-submit { 
+            width: 100%; padding: 18px; background-color: var(--primary); color: white; 
+            border: none; border-radius: 10px; cursor: pointer; font-size: 1.1rem; 
+            font-weight: 700; text-transform: uppercase; transition: all 0.3s ease; 
+            display: flex; justify-content: center; align-items: center; gap: 12px;
+            margin-top: 15px; box-shadow: 0 4px 15px rgba(211, 47, 47, 0.3);
         }
 
-        .subtitle {
-            color: #666;
-            font-size: 0.85rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            margin-top: 5px;
-        }
+        button.btn-submit:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(211, 47, 47, 0.4); }
+        button:disabled { background-color: #ccc; cursor: not-allowed; box-shadow: none; }
 
-        /* Formulário */
-        label { 
-            display: block; 
-            margin-bottom: 8px; 
-            color: #333; 
-            font-weight: 700; 
-            font-size: 0.9rem;
+        /* --- TOAST NOTIFICATION --- */
+        #toast-container {
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+            z-index: 2000; display: flex; flex-direction: column; gap: 10px; width: 90%; max-width: 350px;
         }
+        .toast {
+            background: var(--toast-bg); color: #fff; padding: 15px; border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: flex; align-items: center; gap: 12px;
+            font-size: 0.9rem; animation: slideDownToast 0.3s ease;
+        }
+        .toast.success { border-left: 5px solid #2ecc71; }
+        .toast.error { border-left: 5px solid #e74c3c; }
+        .toast i { font-size: 1.2rem; }
 
-        input { 
-            width: 100%; 
-            padding: 12px; 
-            margin-bottom: 20px; 
-            border: 2px solid #eee; /* Borda mais grossa estilo técnico */
-            border-radius: 6px; 
-            box-sizing: border-box; 
-            transition: all 0.3s;
-            background-color: #fafafa;
-            font-size: 1rem;
-        }
+        @keyframes slideDownToast { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
 
-        input:focus {
-            outline: none;
-            border-color: #d32f2f;
-            background-color: #fff;
+        /* --- MODAL --- */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); display: none;
+            justify-content: center; align-items: center; z-index: 1000;
+            backdrop-filter: blur(4px);
         }
+        .modal-card {
+            background: var(--bg-card); padding: 30px; border-radius: 15px;
+            width: 90%; max-width: 400px; text-align: center;
+            animation: slideUp 0.3s ease; color: var(--text-main);
+        }
+        .modal-details {
+            text-align: left; margin: 20px 0; background: var(--bg-body);
+            padding: 15px; border-radius: 8px; font-size: 0.9rem;
+        }
+        .modal-details p { margin: 5px 0; border-bottom: 1px solid var(--border); padding-bottom: 5px; }
+        .modal-btn-group { display: flex; gap: 10px; margin-top: 20px; }
+        .btn-cancel { background: #7f8c8d; flex: 1; padding: 12px; color: white; border: none; border-radius: 8px; cursor: pointer; }
+        .btn-confirm { background: #28a745; flex: 1; padding: 12px; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;}
 
-        button { 
-            width: 100%; 
-            padding: 15px; 
-            background-color: #d32f2f; 
-            color: white; 
-            border: none; 
-            border-radius: 6px; 
-            cursor: pointer; 
-            font-size: 16px; 
-            font-weight: 800; /* Letra mais grossa */
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            transition: background-color 0.3s, transform 0.1s;
-            box-shadow: 0 4px 6px rgba(211, 47, 47, 0.2);
-        }
-
-        button:hover { 
-            background-color: #b71c1c; 
-        }
-
-        button:active {
-            transform: scale(0.98); 
-        }
-
-        button:disabled {
-            background-color: #ccc;
-            cursor: not-allowed;
-            box-shadow: none;
-        }
-
-        .footer { 
-            text-align: center; 
-            margin-top: 25px; 
-            font-size: 11px; 
-            color: #888; 
-        }
-
-        .msg-sucesso { 
-            background-color: #e8f5e9;
-            color: #2e7d32; 
-            padding: 15px;
-            border-radius: 6px;
-            text-align: center; 
-            display: none; 
-            margin-top: 20px; 
-            font-weight: bold;
-            border: 1px solid #c8e6c9;
-        }
+        @keyframes slideUp { from { transform: translateY(50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        
+        .footer { text-align: center; margin-top: 30px; font-size: 11px; color: var(--text-muted); opacity: 0.7; }
+        #historico-panel { display: none; }
     </style>
 </head>
 <body>
 
+    <div id="rain-container"></div>
+
+    <div id="toast-container"></div>
+
+    <button class="theme-toggle" onclick="toggleTheme()" title="Alternar Modo Escuro">
+        <i class="fas fa-moon"></i>
+    </button>
+
     <div class="container">
-        
         <div class="header">
-            <img src="logo.png" alt="Logo Clínica AMOT" class="logo" onerror="this.style.display='none'">
-            
-            <h1>CLÍNICA AMOT</h1>
-            <div class="subtitle">ORTOPEDIA E TRAUMATOLOGIA</div>
+            <img src="amot.jpeg" alt="AMOT" class="logo" onerror="this.style.display='none'">
+            <h1>Clínica AMOT</h1>
+            <div class="subtitle">SISTEMA INTEGRADO DE INFILTRAÇÕES</div>
         </div>
 
-        <iframe name="hidden_iframe" style="display:none;"></iframe>
-        
-        <form id="formulario-infiltracao" 
-              method="POST" 
-              target="hidden_iframe"
-              action="https://script.google.com/macros/s/AKfycbxyRLKCZ3FgYxnAXcIh9UWTiI3O7h5E_T-OByImENX_Nisju-08MwDJir8gOMuy2o4Vdw/exec">
-            
-            <label>Nome do Paciente:</label>
-            <input type="text" name="paciente" placeholder="Nome completo do paciente" required>
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('form')">Novo Registro</button>
+            <button class="tab-btn" onclick="switchTab('historico')">Consulta Rápida</button>
+        </div>
 
-            <label>Convênio:</label>
-            <input type="text" name="convenio" placeholder="Ex: Unimed, Bradesco, Particular..." required>
+        <div id="form-panel">
+            <form id="formulario-infiltracao" method="POST" action="https://script.google.com/macros/s/AKfycbxMfNKpJpM4lRNQhh-vcBv80NWlP9TfgUUNswa9kP7-Io7cD2EYlHI9YKtxQSYcr9X7yg/exec">
+                
+                <div class="input-group">
+                    <label><i class="fas fa-user"></i> Paciente</label>
+                    <input type="text" name="paciente" id="paciente" placeholder="Digite o nome..." list="pacientes-sugestao" required autocomplete="off">
+                    <datalist id="pacientes-sugestao">
+                        <option value="Maria da Silva">
+                        <option value="João Santos">
+                    </datalist>
+                </div>
 
-            <label>Data da Realização:</label>
-            <input type="date" name="data" required>
+                <div class="input-group">
+                    <label><i class="fas fa-id-card"></i> Convênio</label>
+                    <select name="convenio" id="convenio" required>
+                        <option value="" disabled selected>Selecione...</option>
+                        <option value="Bradesco O.P">Bradesco O.P</option>
+                        <option value="Bradesco Saúde">Bradesco Saúde</option>
+                        <option value="Cabesp">Cabesp</option>
+                        <option value="CarePlus">CarePlus</option>
+                        <option value="Cassi">Cassi</option>
+                        <option value="CET">CET</option>
+                        <option value="Economus">Economus</option>
+                        <option value="GEAP">GEAP</option>
+                        <option value="Mediservice">Mediservice</option>
+                        <option value="Metrus">Metrus</option>
+                        <option value="NotreDame">NotreDame</option>
+                        <option value="Omint">Omint</option>
+                        <option value="Particular">Particular</option>
+                        <option value="Petrobrás">Petrobrás</option>
+                        <option value="Seguros Unimed">Seguros Unimed</option>
+                        <option value="Vivest">Vivest</option>
+                    </select>
+                </div>
 
-            <label>Atendente (Recepção):</label>
-            <input type="text" name="atendente" placeholder="Quem autorizou a guia?" required>
+                <div class="input-group">
+                    <label><i class="fas fa-vial"></i> Medicação Utilizada (Opcional)</label>
+                    <select name="medicacao" id="medicacao" onchange="mudarCorBorda(this)">
+                        <option value="" disabled selected>Selecione (Opcional)...</option>
+                        <option value="Diprospan" style="color: #e67e22; font-weight:bold;">🟠 Diprospan</option>
+                        <option value="Osteonil" style="color: #2980b9; font-weight:bold;">🔵 Osteonil</option>
+                        <option value="Suprahyal" style="color: #27ae60; font-weight:bold;">🟢 Suprahyal</option>
+                        <option value="Synolis" style="color: #8e44ad; font-weight:bold;">🟣 Synolis</option>
+                        <option value="KD Intra-articular" style="color: #16a085; font-weight:bold;">⚪ KD Intra-articular</option>
+                    </select>
+                </div>
 
-            <label>Executor (Médico/Enfermeiro):</label>
-            <input type="text" name="executor" placeholder="Quem realizou o procedimento?" required>
+                <div class="input-group">
+                    <label><i class="fas fa-syringe"></i> Detalhes da Aplicação</label>
+                    <input type="text" name="aplicacao" id="aplicacao" placeholder="Ex: Joelho Esq. - Dose única" required>
+                </div>
 
-            <button type="submit" id="btn-enviar">Registrar Infiltração</button>
-        </form>
+                <div class="input-group">
+                    <label><i class="fas fa-calendar-alt"></i> Data</label>
+                    <input type="date" name="data" id="data" required>
+                </div>
 
-        <p class="msg-sucesso" id="msg-sucesso">✅ Guia registrada com sucesso!</p>
+                <div class="input-group">
+                    <label><i class="fas fa-user-md"></i> Médico Executor</label>
+                    <select name="executor" id="executor" required>
+                        <option value="" disabled selected>Selecione...</option>
+                        <option value="Dr. Ali">Dr. Ali</option>
+                        <option value="Dr. Arthur">Dr. Arthur</option>
+                        <option value="Dr. Diego">Dr. Diego</option>
+                        <option value="Dr. Gustavo">Dr. Gustavo</option>
+                        <option value="Dr. Jorge">Dr. Jorge</option>
+                        <option value="Dr. Lucas">Dr. Lucas</option>
+                        <option value="Dr. Lucio">Dr. Lucio</option>
+                        <option value="Dr. Renato">Dr. Renato</option>
+                        <option value="Dr. Victor">Dr. Victor</option>
+                        <option value="Dr. Yuri">Dr. Yuri</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <label><i class="fas fa-user-check"></i> Atendente</label>
+                    <input type="text" name="atendente" id="atendente" required>
+                </div>
+
+                <button type="button" class="btn-submit" onclick="abrirConfirmacao()">
+                    <i class="fas fa-check"></i> Validar e Enviar
+                </button>
+            </form>
+        </div>
+
+        <div id="historico-panel">
+            <div class="input-group">
+                <label>Buscar Paciente</label>
+                <div style="display: flex; gap: 5px;">
+                    <input type="text" placeholder="Nome ou CPF...">
+                    <button style="width: 50px; background: var(--primary); color: white; border:none; border-radius:8px;"><i class="fas fa-search"></i></button>
+                </div>
+            </div>
+            <div style="text-align: center; color: var(--text-muted); padding: 40px 0;">
+                <i class="fas fa-database fa-3x" style="margin-bottom: 10px; opacity: 0.3;"></i>
+                <p>O sistema de consulta está aguardando conexão com o Banco de Dados.</p>
+            </div>
+        </div>
 
         <div class="footer">
-            Sistema Interno de Controle de Infiltrações<br>
-            Uso exclusivo da equipe AMOT
+            <strong>SISTEMA CLÍNICA AMOT v3.1</strong><br>
+            Uso Exclusivo Equipe Médica
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-confirmacao">
+        <div class="modal-card">
+            <i class="fas fa-clipboard-check fa-3x" style="color: #28a745; margin-bottom: 15px;"></i>
+            <h3>Confirme os Dados</h3>
+            <div class="modal-details" id="resumo-dados"></div>
+            <div class="modal-btn-group">
+                <button class="btn-cancel" onclick="fecharModal()">Corrigir</button>
+                <button class="btn-confirm" id="btn-finalizar-envio" onclick="enviarFormularioReal()">Confirmar</button>
+            </div>
         </div>
     </div>
 
     <script>
-        const form = document.getElementById('formulario-infiltracao');
-        const msgSucesso = document.getElementById('msg-sucesso');
-        const btn = document.getElementById('btn-enviar');
-
-        form.addEventListener('submit', function() {
-            btn.disabled = true;
-            btn.innerHTML = "Enviando dados...";
-            
-            setTimeout(function() {
-                msgSucesso.style.display = "block";
-                btn.innerHTML = "Registrar Infiltração";
-                btn.disabled = false;
-                form.reset(); 
-                
-                setTimeout(() => { msgSucesso.style.display = "none"; }, 4000);
-            }, 1000);
+        // 1. AUTO-DATA
+        window.addEventListener('load', function() {
+            const hoje = new Date().toISOString().split('T')[0];
+            document.getElementById('data').value = hoje;
         });
-    </script>
 
+        // 2. SISTEMA DE CHUVA (RAIN EFFECT)
+        function createRain() {
+            const container = document.getElementById('rain-container');
+            const drop = document.createElement('div');
+            drop.classList.add('drop');
+
+            // Posição horizontal aleatória
+            drop.style.left = Math.random() * 100 + 'vw';
+            
+            // Duração aleatória (velocidade da queda) entre 3s e 6s
+            const duration = Math.random() * 3 + 3;
+            drop.style.animationDuration = duration + 's';
+
+            // Tamanho aleatório (pontos variados)
+            const size = Math.random() * 4 + 2 + 'px'; // 2px a 6px
+            drop.style.width = size;
+            drop.style.height = size;
+
+            container.appendChild(drop);
+
+            // Remove o elemento após a animação acabar para não pesar o site
+            setTimeout(() => {
+                drop.remove();
+            }, duration * 1000);
+        }
+
+        // Cria uma gota a cada 150ms (chuva leve)
+        setInterval(createRain, 150);
+
+        // 3. TOAST NOTIFICATION
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            
+            let icon = type === 'success' ? 'check-circle' : 'exclamation-circle';
+            let color = type === 'success' ? '#2ecc71' : '#e74c3c';
+
+            if(document.body.classList.contains('dark-mode')) {
+                toast.style.color = '#fff';
+            } else {
+                toast.style.color = '#fff';
+            }
+
+            toast.innerHTML = `<i class="fas fa-${icon}" style="color: ${color}"></i> <span>${message}</span>`;
+            
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(-20px)';
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        // 4. MODO ESCURO
+        function toggleTheme() {
+            document.body.classList.toggle('dark-mode');
+            const icon = document.querySelector('.theme-toggle i');
+            if (document.body.classList.contains('dark-mode')) {
+                icon.classList.remove('fa-moon');
+                icon.classList.add('fa-sun');
+            } else {
+                icon.classList.remove('fa-sun');
+                icon.classList.add('fa-moon');
+            }
+        }
+
+        // 5. TABS
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            if(tab === 'form') {
+                document.getElementById('form-panel').style.display = 'block';
+                document.getElementById('historico-panel').style.display = 'none';
+                document.querySelector('button[onclick="switchTab(\'form\')"]').classList.add('active');
+            } else {
+                document.getElementById('form-panel').style.display = 'none';
+                document.getElementById('historico-panel').style.display = 'block';
+                document.querySelector('button[onclick="switchTab(\'historico\')"]').classList.add('active');
+            }
+        }
+
+        // 6. CORES
+        function mudarCorBorda(select) {
+            const val = select.value;
+            if(val === 'Diprospan') select.style.borderLeft = "5px solid #e67e22";
+            else if(val === 'Osteonil') select.style.borderLeft = "5px solid #2980b9";
+            else if(val === 'Synolis') select.style.borderLeft = "5px solid #8e44ad";
+            else if(val === 'Suprahyal') select.style.borderLeft = "5px solid #27ae60";
+            else if(val === 'KD Intra-articular') select.style.borderLeft = "5px solid #16a085";
+            else select.style.borderLeft = "5px solid var(--border)";
+        }
+
+        // 7. VALIDAÇÃO E MODAL
+        const form = document.getElementById('formulario-infiltracao');
+        
+        function abrirConfirmacao() {
+            const requireds = form.querySelectorAll('[required]');
+            let erro = false;
+            requireds.forEach(el => {
+                if(!el.value) {
+                    el.classList.add('input-erro');
+                    erro = true;
+                } else {
+                    el.classList.remove('input-erro');
+                }
+            });
+
+            const dt = new Date(document.getElementById('data').value);
+            const hj = new Date(); hj.setHours(0,0,0,0);
+            if(dt > hj) { 
+                showToast('A data não pode ser futura.', 'error');
+                return;
+            }
+
+            if(erro) {
+                showToast('Preencha os campos obrigatórios.', 'error');
+                return;
+            }
+
+            let medicacaoValor = document.getElementById('medicacao').value;
+            if (!medicacaoValor) { medicacaoValor = "Não informado"; }
+
+            const htmlResumo = `
+                <p><strong>Paciente:</strong> ${document.getElementById('paciente').value}</p>
+                <p><strong>Médico:</strong> ${document.getElementById('executor').value}</p>
+                <p><strong>Medicação:</strong> ${medicacaoValor}</p>
+                <p><strong>Detalhe:</strong> ${document.getElementById('aplicacao').value}</p>
+                <p><strong>Convênio:</strong> ${document.getElementById('convenio').value}</p>
+                <p><strong>Data:</strong> ${document.getElementById('data').value.split('-').reverse().join('/')}</p>
+            `;
+            document.getElementById('resumo-dados').innerHTML = htmlResumo;
+            document.getElementById('modal-confirmacao').style.display = 'flex';
+        }
+
+        function fecharModal() {
+            document.getElementById('modal-confirmacao').style.display = 'none';
+        }
+
+        // 8. ENVIO FINAL
+        function enviarFormularioReal() {
+            const btn = document.getElementById('btn-finalizar-envio');
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+            btn.disabled = true;
+
+            const formData = new FormData(form);
+            
+            fetch(form.action, {
+                method: 'POST',
+                body: new URLSearchParams(formData),
+                mode: 'no-cors'
+            }).then(() => {
+                showToast('Registro salvo com sucesso!', 'success');
+                fecharModal();
+                form.reset();
+                const hoje = new Date().toISOString().split('T')[0];
+                document.getElementById('data').value = hoje;
+                document.getElementById('medicacao').style.borderLeft = "2px solid var(--border)";
+                btn.innerHTML = 'Confirmar';
+                btn.disabled = false;
+            }).catch(err => {
+                showToast('Erro de conexão. Tente novamente.', 'error');
+                btn.disabled = false;
+                btn.innerHTML = 'Confirmar';
+            });
+        }
+    </script>
 </body>
 </html>

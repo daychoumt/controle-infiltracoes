@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "amot-infiltracoes",
+  "main": "worker/index.mjs",
+  "compatibility_date": "2026-09-01",
+  "workers_dev": true,
+  "vars": {
+    "ALLOWED_ORIGINS": "https://xn--amotinfiltrao-7eb3d.online,https://daychoumt.github.io,http://localhost:8080",
+    "FIREBASE_PROJECT_ID": "SUBSTITUIR_PELO_PROJETO_DA_CLINICA",
+    "FIREBASE_WEB_API_KEY": "SUBSTITUIR_PELA_CONFIGURACAO_WEB_DO_FIREBASE"
+  },
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "amot-infiltracoes",
+    "database_id": "SUBSTITUIR_PELO_ID_DO_D1",
+    "migrations_dir": "migrations"
+  }],
+  "observability": {"enabled": false}
+}

@@ -1,0 +1,9 @@
+{
+  "name": "amot-infiltracoes",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Registro de aplicações e acompanhamento administrativo de guias",
+  "engines": {"node": ">=22.13"},
+  "scripts": {"test": "node --test tests/*.test.mjs", "check": "node scripts/check.mjs"}
+}

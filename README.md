@@ -8,15 +8,15 @@ Registro de aplicações e acompanhamento administrativo das guias, da autoriza�
 
 Registrar uma aplicação não garante que sua guia chegue ao faturamento. Informações distribuídas entre recepção, planilha e documentos dificultam identificar o próximo responsável e as pendências de cada atendimento.
 
-O projeto evoluiu de um formulário conectado ao Google Apps Script para uma interface de trabalho com fila por etapa, conferência de documentos e histórico de movimentações. A etapa final exige que o faturamento confirme o recebimento.
+O projeto evoluiu de um formulário conectado ao Google Apps Script para uma interface de trabalho com fila por etapa, conferência de documentos, histórico por prontuário e fechamento mensal impresso. A etapa final exige que o faturamento confirme o recebimento.
 
 ## Experimente em dois minutos
 
 1. Abra o painel. Todos os registros são fictícios e identificados como demonstração.
-2. Ative **Apenas guias para encaminhar** e abra **Ana Exemplo**.
-3. Confira os quatro itens, salve a conferência e envie ao faturamento.
-4. Feche os detalhes, altere **Simular perfil** para **Faturamento**, reabra o atendimento e confirme o recebimento.
-5. Consulte o histórico. O registro agora aparece em **Recebidos e conferidos**.
+2. Abra **Ana Exemplo** para consultar, pelo prontuário, suas aplicações anteriores em diferentes articulações.
+3. Ative **Apenas guias para encaminhar**, confira os quatro itens e envie uma guia ao faturamento.
+4. Altere **Simular perfil** para **Faturamento**, reabra o atendimento e confirme o recebimento.
+5. Abra **Fechamento mensal**, escolha o tipo de folha e veja as relações separadas por convênio, prontas para impressão.
 
 A demonstração é interativa, mas não grava dados em servidores ou no armazenamento do navegador. Recarregar a página restaura os exemplos. Não insira informações reais nessa demonstração.
 
@@ -25,15 +25,19 @@ A demonstração é interativa, mas não grava dados em servidores ou no armazen
 | Área | Comportamento |
 | --- | --- |
 | Registro da clínica | Formulário em três etapas, revisão antes do envio, validação e integração existente com Apps Script preservada |
-| Acompanhamento | Pesquisa por nome, convênio e protocolo; filtros por etapa; indicadores e consulta dos detalhes |
+| Cadastro operacional | Prontuário Racimed, paciente, convênio, pedido, médico, articulação, lado e sequência da aplicação |
+| Regra da guia | Cada combinação de articulação e lado é registrada como uma guia independente |
+| Acompanhamento | Pesquisa por nome, prontuário, convênio e articulação; filtros por etapa; indicadores e consulta dos detalhes |
 | Conferência | Guia autorizada, guia assinada, execução e documentação conferidas |
 | Fluxo | Autorização → agendado → realizado → faturamento → recebimento confirmado |
 | Responsabilidades | Recepção prepara e encaminha; faturamento confirma recebimento; administrador pode atuar em ambos |
-| Histórico | Ações, data, perfil e versão do atendimento; no backend também é registrado o UID do responsável |
+| Histórico | Aplicações agrupadas pelo prontuário, além de ações, datas, perfil e versão de cada atendimento |
+| Fechamento mensal | Movimento completo, pendências ou entrega; folhas A4 separadas por convênio com campos de assinatura |
+| Relação impressa | Paciente, prontuário, médico, articulação, lado, 1ª/2ª/3ª aplicação, data, situação e totais |
 | Backend | API em Cloudflare Workers, autenticação Firebase e banco SQL D1 |
 | Concorrência | Versão esperada por atualização; registro e evento gravados na mesma transação |
 | Acesso | API nega usuários fora da lista de equipe, mesmo que tenham login válido |
-| Qualidade | 26 testes automatizados e verificações de sintaxe e referências locais no GitHub Actions |
+| Qualidade | 28 testes automatizados e verificações de sintaxe e referências locais no GitHub Actions |
 
 ## O que está publicado e o que depende de configuração
 
@@ -41,7 +45,7 @@ A demonstração é interativa, mas não grava dados em servidores ou no armazen
 - **Painel público:** demonstração independente com dados fictícios, sem acesso a pacientes da clínica.
 - **Painel da equipe:** código implementado, mas acesso real depende de criar o D1, configurar um projeto Firebase da clínica e liberar os usuários no Worker. A configuração pública está vazia por padrão.
 
-O painel não importa a planilha nem envia e-mails. O cadastro no painel e o envio do formulário à automação são operações separadas. Essa integração pode ser evoluída quando o código e o contrato do Apps Script estiverem disponíveis.
+O painel não importa a planilha nem envia e-mails. O cadastro no painel e o envio do formulário à automação são operações separadas. A impressão usa os dados já cadastrados no painel e não altera os registros. A integração com a planilha pode ser evoluída quando o código e o contrato do Apps Script estiverem disponíveis.
 
 ## Arquitetura
 
@@ -79,7 +83,7 @@ docs/        Configuração do backend
 
 ## Limites atuais
 
-Sem anexos, edição dos dados cadastrais após abertura, importação da planilha ou decisões clínicas automatizadas. As movimentações são administrativas. Registros concluídos permanecem disponíveis para consulta. O painel da equipe usa paginação de 100 itens; os indicadores e filtros consideram os registros carregados, com opção de carregar mais.
+Sem anexos, edição dos dados cadastrais após abertura, importação da planilha ou decisões clínicas automatizadas. As movimentações são administrativas. Registros concluídos permanecem disponíveis para consulta. Ao abrir o histórico de um paciente ou o fechamento mensal, o painel percorre as páginas disponíveis do backend, com limite de segurança de 10 mil registros.
 
 Nenhum dado real foi usado nos testes. A ativação para a clínica exige validar o fluxo e as permissões em um ambiente de homologação.
 

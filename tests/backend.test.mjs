@@ -6,7 +6,7 @@ import {handle} from '../worker/index.mjs';
 import {authenticate} from '../worker/auth.mjs';
 import {Repository,SQL} from '../worker/repository.mjs';
 import {emptyChecks} from '../assets/domain.js';
-const fields={paciente:'Paciente fictício',convenio:'Particular',medicacao:'',aplicacao:'Teste',data:'2026-01-01',executor:'Dr. Arthur',atendente:'Equipe'};
+const fields={prontuario:'10021',paciente:'Paciente fictício',convenio:'Particular',medicacao:'',articulacao:'Joelho',lado:'Direito',numeroAplicacao:'1',pedidoRacimed:'RC-100',aplicacao:'1ª aplicação · Joelho direito',data:'2026-01-01',executor:'Dr. Arthur',atendente:'Equipe'};
 const env={FIREBASE_PROJECT_ID:'clinic-test',FIREBASE_WEB_API_KEY:'public-test-config',DB:{},ALLOWED_ORIGINS:'https://clinic.example',STAFF_ROLES:JSON.stringify({'staff-1':'recepcao'})};
 const user={uid:'staff-1',role:'recepcao'};
 const id='10000000-0000-4000-8000-000000000001';

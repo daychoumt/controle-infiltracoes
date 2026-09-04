@@ -10,7 +10,14 @@ export const ROLES = {recepcao: 'Recepção', faturamento: 'Faturamento', admin:
 export const CONVENIOS = ['Bradesco O.P', 'Bradesco Saúde', 'Cabesp', 'CarePlus', 'Cassi', 'CET', 'Economus', 'GEAP', 'Mediservice', 'Metrus', 'NotreDame', 'Omint', 'Particular', 'Petrobrás', 'Seguros Unimed', 'Vivest'];
 export const MEDICACOES = ['Diprospan', 'Osteonil', 'Suprahyal', 'Synolis', 'KD Intra-articular'];
 export const MEDICOS = ['Dr. Ali', 'Dr. Arthur', 'Dr. Diego', 'Dr. Gustavo', 'Dr. Jorge', 'Dr. Lucas', 'Dr. Lucio', 'Dr. Renato', 'Dr. Victor', 'Dr. Yuri'];
+export const ARTICULACOES = ['Joelho', 'Ombro', 'Quadril', 'Tornozelo', 'Cotovelo', 'Punho', 'Mão', 'Pé', 'Outra articulação'];
+export const LADOS = ['Direito', 'Esquerdo'];
 export const FIELD_LABELS = {paciente:'Paciente', convenio:'Convênio', medicacao:'Medicação', aplicacao:'Detalhes da aplicação', data:'Data da aplicação', executor:'Médico executor', atendente:'Responsável pelo registro'};
+export const WORKFLOW_FIELD_LABELS = {
+  prontuario:'Prontuário', paciente:'Paciente', convenio:'Convênio', executor:'Médico',
+  medicacao:'Medicação', articulacao:'Articulação', lado:'Lado', numeroAplicacao:'Aplicação',
+  pedidoRacimed:'Pedido no Racimed', data:'Data da aplicação', atendente:'Responsável'
+};
 export const problem = (status, message) => Object.assign(new Error(message), {status});
 export function localDate(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
@@ -35,6 +42,35 @@ export function validateFields(input) {
     throw problem(400, 'Escolha as opções disponíveis de convênio, medicação e médico.');
   }
   return out;
+}
+export function validateCaseFields(input) {
+  if (!input || typeof input !== 'object') throw problem(400, 'Preencha os dados do atendimento.');
+  const articulacaoSelecionada=String(input.articulacao || '').trim();
+  const articulacao=articulacaoSelecionada === 'Outra articulação' ? String(input.articulacaoOutra || '').trim() : articulacaoSelecionada;
+  const structured={
+    prontuario:String(input.prontuario || '').trim().toUpperCase(),
+    paciente:String(input.paciente || '').trim(), convenio:String(input.convenio || '').trim(),
+    medicacao:String(input.medicacao || '').trim(), executor:String(input.executor || '').trim(),
+    articulacao, lado:String(input.lado || '').trim(), numeroAplicacao:String(input.numeroAplicacao || '').trim(),
+    pedidoRacimed:String(input.pedidoRacimed || '').trim(), data:String(input.data || '').trim(),
+    atendente:String(input.atendente || '').trim()
+  };
+  if(!/^[A-Z0-9./-]{2,30}$/.test(structured.prontuario)) throw problem(400,'Informe o número do prontuário do Racimed.');
+  if(!structured.paciente || structured.paciente.length>120) throw problem(400,'Confira o nome do paciente.');
+  if(!CONVENIOS.includes(structured.convenio) || !MEDICOS.includes(structured.executor) || (structured.medicacao && !MEDICACOES.includes(structured.medicacao))) throw problem(400,'Confira convênio, médico e medicação.');
+  if(!articulacao || articulacao.length>60 || (articulacaoSelecionada!=='Outra articulação' && !ARTICULACOES.includes(articulacao))) throw problem(400,'Informe a articulação.');
+  if(!LADOS.includes(structured.lado)) throw problem(400,'Informe o lado da articulação. Cada lado utiliza sua própria guia.');
+  if(!['1','2','3'].includes(structured.numeroAplicacao)) throw problem(400,'Informe se é a 1ª, 2ª ou 3ª aplicação.');
+  if(structured.pedidoRacimed.length>60 || structured.atendente.length<2 || structured.atendente.length>120) throw problem(400,'Confira o pedido e o responsável pelo registro.');
+  if(!validDate(structured.data)) throw problem(400,'Informe uma data de aplicação válida.');
+  structured.aplicacao=`${structured.numeroAplicacao}ª aplicação · ${structured.articulacao} ${structured.lado.toLowerCase()}`;
+  return structured;
+}
+export function applicationLabel(fields) {
+  return fields.numeroAplicacao ? `${fields.numeroAplicacao}ª aplicação` : 'Aplicação';
+}
+export function jointLabel(fields) {
+  return [fields.articulacao,fields.lado].filter(Boolean).join(' · ') || fields.aplicacao || 'Articulação não informada';
 }
 export function emptyChecks() { return Object.fromEntries(Object.keys(CHECKS).map(k=>[k,false])); }
 export function pending(record) { return Object.keys(CHECKS).filter(key=>!record.checks[key]); }

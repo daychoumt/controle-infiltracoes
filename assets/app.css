@@ -284,6 +284,11 @@ main {
   color:var(--muted);
   margin-top:9px;
 }
+.heading-actions {
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
 .button {
   display:inline-flex;
   align-items:center;
@@ -864,6 +869,9 @@ dialog::backdrop {
 .large-dialog,.case-dialog {
   width:min(760px,calc(100% - 28px));
 }
+.reports-dialog {
+  width:min(780px,calc(100% - 28px));
+}
 .dialog-heading {
   display:flex;
   align-items:start;
@@ -951,6 +959,83 @@ dialog::backdrop {
   font-size:12px;
   color:var(--muted);
   margin-top:8px;
+}
+.patient-overview {
+  margin:0 0 26px;
+  border:1px solid var(--line);
+  border-radius:11px;
+  overflow:hidden;
+}
+.patient-overview>div:first-child {
+  padding:18px 20px;
+  background:#f7f9f9;
+}
+.patient-overview h3 {
+  font-size:15px;
+}
+.patient-overview p {
+  color:var(--muted);
+  font-size:13px;
+  margin-top:5px;
+}
+.patient-overview th,.patient-overview td {
+  padding:11px 16px;
+}
+.report-controls {
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:14px;
+  margin:22px 0;
+}
+.report-preview {
+  border:1px solid var(--line);
+  border-radius:11px;
+  overflow:hidden;
+}
+.report-summary,.report-group-row {
+  display:flex;
+  justify-content:space-between;
+  gap:18px;
+  padding:16px 18px;
+}
+.report-summary {
+  align-items:center;
+  background:var(--nav);
+  color:white;
+}
+.report-summary strong {
+  font-family:Manrope,sans-serif;
+  font-size:22px;
+}
+.report-summary span {
+  color:#c4d3d8;
+  font-size:13px;
+}
+.report-group-row {
+  align-items:flex-start;
+  border-top:1px solid var(--line);
+}
+.report-group-row:first-of-type {
+  border-top:0;
+}
+.report-group-row strong {
+  font-size:14px;
+  min-width:145px;
+}
+.report-group-row span {
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.5;
+  text-align:right;
+}
+.report-empty {
+  padding:28px;
+  color:var(--muted);
+  font-size:14px;
+  text-align:center;
+}
+.print-sheet {
+  display:none;
 }
 .history {
   border-top:1px solid var(--line);
@@ -1160,6 +1245,14 @@ dialog::backdrop {
     gap:17px;
     margin-bottom:25px;
   }
+  .heading-actions {
+    width:100%;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+  }
+  .heading-actions .button {
+    white-space:normal;
+  }
   h1 {
     font-size:28px;
     letter-spacing:-.8px;
@@ -1322,11 +1415,148 @@ dialog::backdrop {
   .dialog-actions {
     flex-direction:column-reverse;
   }
+  .report-controls {
+    grid-template-columns:1fr;
+  }
+  .report-summary,.report-group-row {
+    flex-direction:column;
+    gap:5px;
+  }
+  .report-group-row span {
+    text-align:left;
+  }
   .stepper li {
     font-size:9px;
   }
   .history li {
     font-size:11px;
+  }
+}
+@page {
+  size:A4 landscape;
+  margin:10mm;
+}
+@media print {
+  body {
+    background:#fff;
+    color:#111;
+  }
+  body>.sidebar,.workspace,.no-script {
+    display:none!important;
+  }
+  body>.workspace:has(.print-sheet) {
+    display:block!important;
+    margin:0!important;
+  }
+  body>.workspace>header,body>.workspace>footer,body>.workspace>main>*:not(.print-sheet) {
+    display:none!important;
+  }
+  body>.workspace>main {
+    max-width:none;
+    padding:0;
+    margin:0;
+  }
+  .print-sheet {
+    display:block!important;
+  }
+  .print-insurer {
+    break-after:page;
+    font-family:Arial,sans-serif;
+    color:#111;
+  }
+  .print-insurer:last-child {
+    break-after:auto;
+  }
+  .print-header {
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:20px;
+    border-bottom:2px solid #111;
+    padding:0 0 5mm;
+    margin-bottom:4mm;
+  }
+  .print-header>div:first-child {
+    display:grid;
+    gap:2px;
+  }
+  .print-header>div:first-child strong {
+    font-size:20pt;
+  }
+  .print-header>div:first-child span,.print-header p {
+    font-size:9pt;
+  }
+  .print-header h1 {
+    font-family:Arial,sans-serif;
+    font-size:16pt;
+    letter-spacing:0;
+    text-align:right;
+  }
+  .print-header p {
+    text-align:right;
+  }
+  .print-meta {
+    display:flex;
+    justify-content:space-between;
+    gap:8mm;
+    font-size:8pt;
+    margin-bottom:4mm;
+  }
+  .print-table {
+    white-space:normal;
+    table-layout:fixed;
+  }
+  .print-table th,.print-table td {
+    border:1px solid #777;
+    padding:2.2mm 1.5mm;
+    color:#111;
+    background:#fff;
+    font-size:7.5pt;
+    vertical-align:top;
+    overflow-wrap:anywhere;
+  }
+  .print-table th {
+    font-weight:700;
+  }
+  .print-table th:first-child,.print-table td:first-child {
+    width:8mm;
+    padding-left:1.5mm;
+    text-align:center;
+  }
+  .print-table th:nth-child(2) {width:38mm;}
+  .print-table th:nth-child(3) {width:22mm;}
+  .print-table th:nth-child(4) {width:30mm;}
+  .print-table th:nth-child(5) {width:24mm;}
+  .print-table th:nth-child(6) {width:18mm;}
+  .print-table th:nth-child(7) {width:18mm;}
+  .print-table th:nth-child(8) {width:20mm;}
+  .print-totals {
+    display:flex;
+    justify-content:space-between;
+    gap:10mm;
+    padding:3mm 0;
+    font-size:8pt;
+  }
+  .print-signatures {
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:8mm;
+    margin-top:13mm;
+  }
+  .print-signatures>div {
+    border-top:1px solid #222;
+    padding-top:2mm;
+    min-height:10mm;
+  }
+  .print-signatures span {
+    font-size:8pt;
+  }
+  .print-insurer>footer {
+    display:block;
+    border:0;
+    padding:5mm 0 0;
+    font-size:7.5pt;
+    color:#444;
   }
 }
 @media(prefers-reduced-motion:reduce) {

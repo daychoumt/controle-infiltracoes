@@ -1,4 +1,4 @@
-import {problem,validateFields,emptyChecks,transition} from '../assets/domain.js';
+import {problem,validateCaseFields,emptyChecks,transition} from '../assets/domain.js';
 import {authenticate} from './auth.mjs';
 import {Repository} from './repository.mjs';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -39,7 +39,7 @@ export async function handle(request,env,dependencies={}) {
       if(!['admin','recepcao'].includes(user.role))throw problem(403,'A abertura de atendimentos é feita pela recepção.');
       const input=await readJson(request);
       if(!input || !uuid.test(input.id))throw problem(400,'Protocolo inválido.');
-      const fields=validateFields(input.fields),at=new Date().toISOString();
+      const fields=validateCaseFields(input.fields),at=new Date().toISOString();
       return reply(201,await repository.create({id:input.id,fields,stage:'autorizacao',checks:emptyChecks(),version:1,createdAt:at,updatedAt:at},user));
     }
     if(match && request.method==='PATCH') {

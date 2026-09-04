@@ -1,14 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {transition,emptyChecks,validateFields,validDate} from '../assets/domain.js';
+import {transition,emptyChecks,validateFields,validateCaseFields,validDate,jointLabel} from '../assets/domain.js';
 import {DemoStore} from '../assets/store.js';
 const fields={paciente:'Paciente de teste',convenio:'Particular',medicacao:'',aplicacao:'Procedimento de teste',data:'2026-01-01',executor:'Dr. Arthur',atendente:'Recepção'};
 const all={autorizada:true,assinada:true,execucao:true,documentos:true};
 const record=(stage='autorizacao',checks=emptyChecks())=>({fields,stage,checks,version:1});
+const workflowFields={prontuario:'ab-102',paciente:'Paciente de teste',convenio:'Particular',medicacao:'',articulacao:'Joelho',lado:'Direito',numeroAplicacao:'2',pedidoRacimed:'RC-9',data:'2026-01-01',executor:'Dr. Arthur',atendente:'Recepção'};
 test('normaliza os campos e rejeita datas inexistentes',()=>{
   assert.equal(validateFields({...fields,paciente:'  Ana  '}).paciente,'Ana');
   assert.equal(validDate('2026-02-30'),false);assert.equal(validDate('2028-02-29'),true);
   assert.throws(()=>validateFields({...fields,data:'2026-02-30'}),{status:400});
+});
+test('estrutura uma guia por articulação e preserva a sequência',()=>{
+  const result=validateCaseFields(workflowFields);
+  assert.equal(result.prontuario,'AB-102');assert.equal(result.aplicacao,'2ª aplicação · Joelho direito');assert.equal(jointLabel(result),'Joelho · Direito');
+  assert.throws(()=>validateCaseFields({...workflowFields,lado:'Bilateral'}),{status:400});
+  assert.throws(()=>validateCaseFields({...workflowFields,numeroAplicacao:'4'}),{status:400});
+});
+test('aceita outra articulação somente quando ela é identificada',()=>{
+  assert.equal(validateCaseFields({...workflowFields,articulacao:'Outra articulação',articulacaoOutra:'Sacroilíaca'}).articulacao,'Sacroilíaca');
+  assert.throws(()=>validateCaseFields({...workflowFields,articulacao:'Outra articulação',articulacaoOutra:''}),{status:400});
 });
 test('rejeita campos obrigatórios, enumerações e tamanho inválidos',()=>{
   for(const change of [{paciente:' '},{convenio:'Não existe'},{executor:'Outro'},{medicacao:'Outro'},{aplicacao:'x'.repeat(301)}])assert.throws(()=>validateFields({...fields,...change}),{status:400});

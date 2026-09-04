@@ -1,6 +1,6 @@
 # AMOT · Gestão de infiltrações
 
-Registro de aplicações e acompanhamento administrativo das guias, da autorização à confirmação do faturamento. Um projeto criado a partir de uma necessidade da rotina de recepção de uma clínica.
+Controle interno do setor de autorizações para acompanhar cada guia, do pedido recebido à entrega ao faturamento, sem depender de cadernos.
 
 **[Explorar a demonstração](https://xn--amotinfiltrao-7eb3d.online/painel.html)** · **[Formulário da clínica](https://xn--amotinfiltrao-7eb3d.online/)** · **[Configurar o backend](docs/BACKEND.md)**
 
@@ -8,15 +8,15 @@ Registro de aplicações e acompanhamento administrativo das guias, da autoriza�
 
 Registrar uma aplicação não garante que sua guia chegue ao faturamento. Informações distribuídas entre recepção, planilha e documentos dificultam identificar o próximo responsável e as pendências de cada atendimento.
 
-O projeto evoluiu de um formulário conectado ao Google Apps Script para uma interface de trabalho com fila por etapa, conferência de documentos, histórico por prontuário e fechamento mensal impresso. A etapa final exige que o faturamento confirme o recebimento.
+O projeto evoluiu de um formulário conectado ao Google Apps Script para uma interface de trabalho do setor de autorizações. O sistema reduz a atualização manual aos acontecimentos reais da rotina e produz as relações impressas usadas na entrega.
 
 ## Experimente em dois minutos
 
 1. Abra o painel. Todos os registros são fictícios e identificados como demonstração.
 2. Abra **Ana Exemplo** para consultar, pelo prontuário, suas aplicações anteriores em diferentes articulações.
-3. Ative **Apenas guias para encaminhar**, confira os quatro itens e envie uma guia ao faturamento.
-4. Altere **Simular perfil** para **Faturamento**, reabra o atendimento e confirme o recebimento.
-5. Abra **Fechamento mensal**, escolha o tipo de folha e veja as relações separadas por convênio, prontas para impressão.
+3. Abra uma guia com pendência para ver o alerta destacado e a observação do que precisa ser corrigido.
+4. Em uma guia autorizada, informe o número, confira os documentos e avance com poucos cliques.
+5. Abra **Fechamento mensal**, escolha o tipo de folha e veja as relações separadas por convênio, prontas para impressão e assinatura.
 
 A demonstração é interativa, mas não grava dados em servidores ou no armazenamento do navegador. Recarregar a página restaura os exemplos. Não insira informações reais nessa demonstração.
 
@@ -27,13 +27,14 @@ A demonstração é interativa, mas não grava dados em servidores ou no armazen
 | Registro da clínica | Formulário em três etapas, revisão antes do envio, validação e integração existente com Apps Script preservada |
 | Cadastro operacional | Prontuário Racimed, paciente, convênio, pedido, médico, articulação, lado e sequência da aplicação |
 | Regra da guia | Cada combinação de articulação e lado é registrada como uma guia independente |
-| Acompanhamento | Pesquisa por nome, prontuário, convênio e articulação; filtros por etapa; indicadores e consulta dos detalhes |
+| Acompanhamento | Fila visual por situação, pesquisa por paciente, prontuário, número da guia, convênio e articulação |
 | Conferência | Guia autorizada, guia assinada, execução e documentação conferidas |
-| Fluxo | Autorização → agendado → realizado → faturamento → recebimento confirmado |
-| Responsabilidades | Recepção prepara e encaminha; faturamento confirma recebimento; administrador pode atuar em ambos |
+| Fluxo enxuto | Novo pedido → na operadora/em análise → autorizado → realizado → pronto → entregue ao faturamento |
+| Pendências | Correções aparecem como alerta separado e impedem avanço até serem resolvidas |
+| Responsabilidade | O setor de autorizações mantém o controle; recepção e faturamento recebem as relações impressas |
 | Histórico | Aplicações agrupadas pelo prontuário, além de ações, datas, perfil e versão de cada atendimento |
 | Fechamento mensal | Movimento completo, pendências ou entrega; folhas A4 separadas por convênio com campos de assinatura |
-| Relação impressa | Paciente, prontuário, médico, articulação, lado, 1ª/2ª/3ª aplicação, data, situação e totais |
+| Relação impressa | Paciente, prontuário, número da guia, médico, articulação, lado, 1ª/2ª/3ª aplicação, data, situação e totais |
 | Backend | API em Cloudflare Workers, autenticação Firebase e banco SQL D1 |
 | Concorrência | Versão esperada por atualização; registro e evento gravados na mesma transação |
 | Acesso | API nega usuários fora da lista de equipe, mesmo que tenham login válido |
@@ -83,7 +84,7 @@ docs/        Configuração do backend
 
 ## Limites atuais
 
-Sem anexos, edição dos dados cadastrais após abertura, importação da planilha ou decisões clínicas automatizadas. As movimentações são administrativas. Registros concluídos permanecem disponíveis para consulta. Ao abrir o histórico de um paciente ou o fechamento mensal, o painel percorre as páginas disponíveis do backend, com limite de segurança de 10 mil registros.
+Sem anexos, importação automática do Racimed ou decisões clínicas automatizadas. Como não existe integração disponível com o Racimed, o primeiro cadastro ainda é manual; número da guia, data da aplicação, pendência, observação e conferência podem ser atualizados depois. Guias entregues permanecem disponíveis para histórico e impressão.
 
 Nenhum dado real foi usado nos testes. A ativação para a clínica exige validar o fluxo e as permissões em um ambiente de homologação.
 

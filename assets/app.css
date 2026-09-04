@@ -611,11 +611,43 @@ footer a {
 .demo-controls .text-button {
   font-size:12px;
 }
-.metrics {
-  display:grid;
-  grid-template-columns:repeat(4,minmax(0,1fr));
-  gap:16px;
+.status-section {
   margin-bottom:25px;
+}
+.status-heading {
+  display:flex;
+  align-items:end;
+  justify-content:space-between;
+  gap:20px;
+  margin-bottom:14px;
+}
+.status-heading h2 {
+  font-size:18px;
+}
+.status-heading p {
+  color:var(--muted);
+  font-size:14px;
+  margin-top:5px;
+}
+.status-legend {
+  color:var(--muted);
+  font-size:12px;
+  white-space:nowrap;
+}
+.status-legend i {
+  display:inline-block;
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  background:var(--brand);
+  margin-right:5px;
+}
+.stage-overview {
+  display:grid;
+  grid-template-columns:repeat(8,minmax(125px,1fr));
+  gap:10px;
+  overflow-x:auto;
+  padding:3px 3px 8px;
 }
 .metric {
   padding:22px;
@@ -652,33 +684,42 @@ footer a {
 .metric.complete strong {
   color:var(--green);
 }
-.stage-filters {
-  display:flex;
-  gap:7px;
-  padding:20px 25px 0;
-  flex-wrap:wrap;
-}
 .filter {
-  display:inline-flex;
-  gap:8px;
-  align-items:center;
-  min-height:36px;
+  display:grid;
+  gap:6px;
+  align-content:start;
+  min-height:112px;
   background:white;
   border:1px solid var(--line);
-  border-radius:6px;
-  color:var(--muted);
-  font-size:12px;
-  padding:7px 11px;
+  border-top:5px solid #73858b;
+  border-radius:10px;
+  color:var(--ink);
+  font-size:14px;
+  padding:14px;
+  text-align:left;
+  min-width:125px;
 }
 .filter[aria-pressed=true] {
-  background:var(--nav);
-  border-color:var(--nav);
-  color:white;
+  box-shadow:0 0 0 3px #172a3220;
+  transform:translateY(-2px);
+}
+.filter strong {
+  font-family:Manrope,sans-serif;
+  font-size:25px;
+  line-height:1;
 }
 .filter small {
-  font-size:10px;
-  opacity:.8;
+  font-size:12px;
+  color:var(--muted);
+  line-height:1.35;
 }
+.filter.status-recebido {border-top-color:#667b85;}
+.filter.status-pendencia {border-top-color:#b42318;background:#fff7f5;}
+.filter.status-solicitado {border-top-color:#a66a16;}
+.filter.status-agendado {border-top-color:#32669b;}
+.filter.status-realizado {border-top-color:#4d6d8c;}
+.filter.status-conferencia {border-top-color:#765395;}
+.filter.status-faturamento {border-top-color:#25704f;}
 .toolbar {
   display:flex;
   align-items:end;
@@ -771,21 +812,43 @@ td .text-button {
   background:#fff1db;
   color:#865415;
 }
+.pill.recebido {
+  background:#edf1f2;
+  color:#4f626a;
+}
+.pill.solicitado {
+  background:#fff1db;
+  color:#865415;
+}
 .pill.agendado {
-  background:#edf0fb;
-  color:#495a99;
+  background:#e8f1fb;
+  color:#2f5f91;
 }
 .pill.realizado {
   background:#edf4f4;
   color:#32616b;
 }
 .pill.faturamento {
-  background:#f7ebf0;
-  color:#8c4461;
-}
-.pill.concluido {
-  background:#eaf4ee;
+  background:#e7f4ed;
   color:#286347;
+}
+.pill.conferencia {
+  background:#f1eafa;
+  color:#684487;
+}
+.stage-row {
+  box-shadow:inset 4px 0 #667b85;
+}
+.stage-row.solicitado {box-shadow:inset 4px 0 #a66a16;}
+.stage-row.agendado {box-shadow:inset 4px 0 #32669b;}
+.stage-row.realizado {box-shadow:inset 4px 0 #4d6d8c;}
+.stage-row.conferencia {box-shadow:inset 4px 0 #765395;}
+.stage-row.faturamento {box-shadow:inset 4px 0 #25704f;}
+.stage-row.has-pending {box-shadow:inset 5px 0 #b03636;background:#fffafa;}
+.pending-note {
+  color:#a12727;
+  font-weight:650;
+  font-size:11px;
 }
 .check-progress {
   display:flex;
@@ -867,7 +930,7 @@ dialog::backdrop {
   backdrop-filter:blur(3px);
 }
 .large-dialog,.case-dialog {
-  width:min(760px,calc(100% - 28px));
+  width:min(860px,calc(100% - 28px));
 }
 .reports-dialog {
   width:min(780px,calc(100% - 28px));
@@ -900,6 +963,56 @@ dialog::backdrop {
   padding:22px 0;
   border-block:1px solid var(--line);
 }
+.guide-identity {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:18px;
+  background:var(--nav);
+  color:white;
+  border-radius:11px;
+  padding:18px 20px;
+  margin-bottom:22px;
+}
+.guide-identity>div {
+  display:grid;
+  gap:4px;
+}
+.guide-identity>div span {
+  color:#aec1c8;
+  font-size:12px;
+}
+.guide-identity strong {
+  font-family:Manrope,sans-serif;
+  font-size:21px;
+}
+.guide-update {
+  border:1px solid var(--line);
+  border-radius:11px;
+  padding:20px;
+  margin:0 0 24px;
+  background:#f8fafa;
+}
+.guide-update>.field-grid {
+  margin-top:18px;
+}
+.pending-toggle {
+  flex-direction:row;
+  align-items:center;
+  align-self:end;
+  min-height:46px;
+  border:1px solid #dfc8c8;
+  background:#fff7f7;
+  padding:11px 13px;
+  border-radius:8px;
+  color:#7f3333;
+}
+.pending-toggle input {
+  width:18px;
+  height:18px;
+  min-height:0;
+  accent-color:#a72435;
+}
 .detail-grid dt {
   font-size:12px;
   color:var(--muted);
@@ -918,7 +1031,7 @@ dialog::backdrop {
 }
 .stepper {
   display:grid;
-  grid-template-columns:repeat(5,1fr);
+  grid-template-columns:repeat(6,1fr);
   list-style:none;
   padding:0;
   margin:0;
@@ -1170,9 +1283,7 @@ dialog::backdrop {
   .demo-link {
     grid-column:1/-1;
   }
-  .metrics {
-    grid-template-columns:repeat(2,1fr);
-  }
+  .stage-overview {grid-template-columns:repeat(8,135px);}
   .page-heading {
     flex-wrap:wrap;
   }
@@ -1329,9 +1440,8 @@ dialog::backdrop {
     margin-left:auto;
     font-size:10px;
   }
-  .metrics {
-    gap:10px;
-  }
+  .status-heading {align-items:flex-start;}
+  .status-legend {display:none;}
   .metric {
     padding:17px 14px;
     gap:10px;
@@ -1346,14 +1456,9 @@ dialog::backdrop {
   .metric small {
     font-size:10px;
   }
-  .stage-filters {
-    padding:17px 16px 0;
-    flex-wrap:nowrap;
-    overflow-x:auto;
-  }
   .filter {
-    flex-shrink:0;
-    font-size:11px;
+    font-size:13px;
+    min-height:106px;
   }
   .toolbar {
     padding:18px 16px;
@@ -1525,11 +1630,12 @@ dialog::backdrop {
   }
   .print-table th:nth-child(2) {width:38mm;}
   .print-table th:nth-child(3) {width:22mm;}
-  .print-table th:nth-child(4) {width:30mm;}
-  .print-table th:nth-child(5) {width:24mm;}
-  .print-table th:nth-child(6) {width:18mm;}
-  .print-table th:nth-child(7) {width:18mm;}
-  .print-table th:nth-child(8) {width:20mm;}
+  .print-table th:nth-child(4) {width:25mm;}
+  .print-table th:nth-child(5) {width:28mm;}
+  .print-table th:nth-child(6) {width:22mm;}
+  .print-table th:nth-child(7) {width:16mm;}
+  .print-table th:nth-child(8) {width:18mm;}
+  .print-table th:nth-child(9) {width:19mm;}
   .print-totals {
     display:flex;
     justify-content:space-between;

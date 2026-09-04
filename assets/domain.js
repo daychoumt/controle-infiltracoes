@@ -1,12 +1,13 @@
 export const STAGES = [
-  ['autorizacao', 'Em autorização'], ['agendado', 'Agendado'],
-  ['realizado', 'Realizado'], ['faturamento', 'No faturamento'], ['concluido', 'Recebido e conferido']
+  ['recebido', 'Novo pedido'], ['solicitado', 'Na operadora / em análise'],
+  ['agendado', 'Autorizado'], ['realizado', 'Realizado'],
+  ['conferencia', 'Pronto para faturamento'], ['faturamento', 'Entregue ao faturamento']
 ];
 export const CHECKS = {
   autorizada: 'Guia autorizada', assinada: 'Guia assinada',
   execucao: 'Execução conferida', documentos: 'Documentação conferida'
 };
-export const ROLES = {recepcao: 'Recepção', faturamento: 'Faturamento', admin: 'Administrador'};
+export const ROLES = {recepcao:'Setor de Autorizações',admin:'Administrador'};
 export const CONVENIOS = ['Bradesco O.P', 'Bradesco Saúde', 'Cabesp', 'CarePlus', 'Cassi', 'CET', 'Economus', 'GEAP', 'Mediservice', 'Metrus', 'NotreDame', 'Omint', 'Particular', 'Petrobrás', 'Seguros Unimed', 'Vivest'];
 export const MEDICACOES = ['Diprospan', 'Osteonil', 'Suprahyal', 'Synolis', 'KD Intra-articular'];
 export const MEDICOS = ['Dr. Ali', 'Dr. Arthur', 'Dr. Diego', 'Dr. Gustavo', 'Dr. Jorge', 'Dr. Lucas', 'Dr. Lucio', 'Dr. Renato', 'Dr. Victor', 'Dr. Yuri'];
@@ -16,7 +17,8 @@ export const FIELD_LABELS = {paciente:'Paciente', convenio:'Convênio', medicaca
 export const WORKFLOW_FIELD_LABELS = {
   prontuario:'Prontuário', paciente:'Paciente', convenio:'Convênio', executor:'Médico',
   medicacao:'Medicação', articulacao:'Articulação', lado:'Lado', numeroAplicacao:'Aplicação',
-  pedidoRacimed:'Pedido no Racimed', data:'Data da aplicação', atendente:'Responsável'
+  pedidoRacimed:'Pedido no Racimed', numeroGuia:'Número da guia', data:'Data da aplicação',
+  observacao:'Pendência / observação', atendente:'Responsável'
 };
 export const problem = (status, message) => Object.assign(new Error(message), {status});
 export function localDate(date = new Date()) {
@@ -52,7 +54,8 @@ export function validateCaseFields(input) {
     paciente:String(input.paciente || '').trim(), convenio:String(input.convenio || '').trim(),
     medicacao:String(input.medicacao || '').trim(), executor:String(input.executor || '').trim(),
     articulacao, lado:String(input.lado || '').trim(), numeroAplicacao:String(input.numeroAplicacao || '').trim(),
-    pedidoRacimed:String(input.pedidoRacimed || '').trim(), data:String(input.data || '').trim(),
+    pedidoRacimed:String(input.pedidoRacimed || '').trim(), numeroGuia:String(input.numeroGuia || '').trim().toUpperCase(),
+    pendencia:Boolean(input.pendencia),observacao:String(input.observacao || '').trim(), data:String(input.data || '').trim(),
     atendente:String(input.atendente || '').trim()
   };
   if(!/^[A-Z0-9./-]{2,30}$/.test(structured.prontuario)) throw problem(400,'Informe o número do prontuário do Racimed.');
@@ -61,10 +64,21 @@ export function validateCaseFields(input) {
   if(!articulacao || articulacao.length>60 || (articulacaoSelecionada!=='Outra articulação' && !ARTICULACOES.includes(articulacao))) throw problem(400,'Informe a articulação.');
   if(!LADOS.includes(structured.lado)) throw problem(400,'Informe o lado da articulação. Cada lado utiliza sua própria guia.');
   if(!['1','2','3'].includes(structured.numeroAplicacao)) throw problem(400,'Informe se é a 1ª, 2ª ou 3ª aplicação.');
-  if(structured.pedidoRacimed.length>60 || structured.atendente.length<2 || structured.atendente.length>120) throw problem(400,'Confira o pedido e o responsável pelo registro.');
-  if(!validDate(structured.data)) throw problem(400,'Informe uma data de aplicação válida.');
+  if(structured.pedidoRacimed.length>60 || structured.numeroGuia.length>60 || structured.observacao.length>300 || structured.atendente.length<2 || structured.atendente.length>120) throw problem(400,'Confira os dados da guia e o responsável pelo registro.');
+  if(structured.data && !validDate(structured.data)) throw problem(400,'Informe uma data de aplicação válida.');
   structured.aplicacao=`${structured.numeroAplicacao}ª aplicação · ${structured.articulacao} ${structured.lado.toLowerCase()}`;
   return structured;
+}
+export function updateCaseFields(previous,input) {
+  if(!input || typeof input!=='object')throw problem(400,'Confira os dados da guia.');
+  const numeroGuia=String(input.numeroGuia ?? previous.numeroGuia ?? '').trim().toUpperCase();
+  const observacao=String(input.observacao ?? previous.observacao ?? '').trim();
+  const pendencia=typeof input.pendencia==='boolean'?input.pendencia:Boolean(previous.pendencia);
+  const data=String(input.data ?? previous.data ?? '').trim();
+  if(numeroGuia.length>60)throw problem(400,'O número da guia está muito longo.');
+  if(observacao.length>300)throw problem(400,'A observação deve ter no máximo 300 caracteres.');
+  if(data && !validDate(data))throw problem(400,'Informe uma data de aplicação válida.');
+  return {...previous,numeroGuia,observacao,pendencia,data};
 }
 export function applicationLabel(fields) {
   return fields.numeroAplicacao ? `${fields.numeroAplicacao}ª aplicação` : 'Aplicação';
@@ -76,30 +90,31 @@ export function emptyChecks() { return Object.fromEntries(Object.keys(CHECKS).ma
 export function pending(record) { return Object.keys(CHECKS).filter(key=>!record.checks[key]); }
 export function nextStage(stage) { return STAGES[STAGES.findIndex(([id])=>id === stage)+1]?.[0] || null; }
 export function canEdit(record, role) {
-  return record.stage !== 'concluido' && (role === 'admin' || (role === 'recepcao' && record.stage !== 'faturamento'));
+  return record.stage !== 'faturamento' && ['admin','recepcao'].includes(role);
 }
 export function transition(record, input, role) {
   if (!Object.hasOwn(ROLES,role)) throw problem(403,'Acesso não autorizado.');
   if (!input || !Number.isInteger(input.version) || input.version !== record.version) throw problem(409,'Este atendimento foi atualizado. Reabra os detalhes antes de alterar.');
   const target = input.stage || record.stage;
   const advancing = target !== record.stage;
-  if (record.stage === 'concluido') throw problem(409,'O recebimento já foi concluído. O histórico está disponível para consulta.');
+  if (record.stage === 'faturamento') throw problem(409,'A guia já foi entregue ao faturamento. O histórico está disponível para consulta.');
   if (advancing && nextStage(record.stage) !== target) throw problem(400,'Avance uma etapa de cada vez.');
-  if (record.stage === 'faturamento') {
-    if (!['admin','faturamento'].includes(role) || !advancing) throw problem(403,'Somente o faturamento pode confirmar o recebimento.');
-    if (input.checks && Object.keys(CHECKS).some(key=>input.checks[key] !== record.checks[key])) throw problem(400,'A conferência enviada não pode ser alterada nesta etapa.');
-  } else if (!canEdit(record,role)) throw problem(403,'Esta ação é da recepção.');
+  if (!canEdit(record,role)) throw problem(403,'Esta ação é do setor de autorizações.');
   const checks = input.checks || record.checks;
+  const fields = input.fields ? updateCaseFields(record.fields,input.fields) : {...record.fields};
   if (!checks || Object.keys(checks).length !== Object.keys(CHECKS).length || Object.keys(CHECKS).some(key=>typeof checks[key] !== 'boolean')) throw problem(400,'Confira a lista de documentos.');
-  if (target !== 'autorizacao' && !checks.autorizada) throw problem(400,'Confirme a autorização da guia antes de avançar.');
+  if (advancing && fields.pendencia) throw problem(400,'Resolva a pendência antes de avançar esta guia.');
+  if (['agendado','realizado','conferencia','faturamento'].includes(target) && !checks.autorizada) throw problem(400,'Confirme a autorização da guia antes de avançar.');
+  if (['agendado','realizado','conferencia','faturamento'].includes(target) && !fields.numeroGuia) throw problem(400,'Informe o número da guia autorizada antes de avançar.');
   const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-  if (advancing && target==='realizado' && record.fields.data>today) throw problem(400,'Uma aplicação futura ainda não pode ser marcada como realizada.');
-  if (['faturamento','concluido'].includes(target) && Object.values(checks).some(value=>!value)) throw problem(400,'Conclua os quatro itens de conferência antes de enviar ao faturamento.');
-  return {...record, checks:{...checks}, stage:target, version:record.version+1};
+  if (advancing && target==='realizado' && (!fields.data || fields.data>today)) throw problem(400,'Informe a data da aplicação antes de marcar como realizada.');
+  if (['conferencia','faturamento'].includes(target) && Object.values(checks).some(value=>!value)) throw problem(400,'Conclua os quatro itens de conferência antes de deixar a guia pronta para o faturamento.');
+  return {...record,fields,checks:{...checks}, stage:target, version:record.version+1};
 }
 export function eventLabel(previous, updated) {
   if (!previous) return 'Atendimento aberto';
-  if (previous.stage !== updated.stage) return updated.stage === 'concluido' ? 'Recebimento confirmado pelo faturamento' : `Etapa alterada: ${STAGES.find(([id])=>id === updated.stage)[1]}`;
+  if (previous.stage !== updated.stage) return updated.stage === 'faturamento' ? 'Guia entregue ao faturamento' : `Etapa alterada: ${STAGES.find(([id])=>id === updated.stage)[1]}`;
+  if (JSON.stringify(previous.fields)!==JSON.stringify(updated.fields)) return 'Dados de acompanhamento da guia atualizados';
   const changed = Object.entries(CHECKS).filter(([key])=>previous.checks[key] !== updated.checks[key]);
   return changed.length ? changed.map(([key,label])=>`${label}: ${updated.checks[key] ? 'sim' : 'não'}`).join(' · ') : 'Conferência revisada';
 }

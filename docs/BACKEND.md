@@ -45,7 +45,7 @@ npx wrangler secret put STAFF_ROLES
 Cole um objeto JSON com os UIDs reais quando a ferramenta pedir o valor. Exemplo ilustrativo:
 
 ```json
-{"UID_DA_RECEPCAO":"recepcao","UID_DO_FATURAMENTO":"faturamento","UID_DO_ADMIN":"admin"}
+{"UID_DO_SETOR":"recepcao","UID_DO_ADMIN":"admin"}
 ```
 
 No painel Cloudflare, a alternativa é **Configurações → Variáveis e segredos → Adicionar**, nome `STAFF_ROLES`, tipo **Segredo**. Sem essa lista, todo usuário é recusado, inclusive quem acabou de criar uma conta no Firebase. Mantenha apenas os acessos necessários.
@@ -61,21 +61,21 @@ export const config = Object.freeze({
 });
 ```
 
-Use a origem do Worker, sem `/cases` no final. O painel deve ser acessado por HTTPS em produção. Publique a alteração pelo GitHub Pages. A página continua abrindo na demonstração; **Acesso da equipe** permite entrar no banco real. Sair limpa os registros exibidos e retorna aos exemplos.
+Use a origem do Worker, sem `/cases` no final. O painel deve ser acessado por HTTPS em produção. Publique a alteração pelo GitHub Pages. A página continua abrindo na demonstração; **Acesso do setor** permite entrar no banco real. Sair limpa os registros exibidos e retorna aos exemplos.
 
 Não coloque `STAFF_ROLES`, tokens, senhas ou dados de pacientes nesse arquivo. O segredo Gemini não é usado neste projeto.
 
 ## 4. Homologar antes da rotina da clínica
 
-Com registros fictícios e duas contas diferentes:
+Com registros fictícios e uma conta do setor:
 
 1. Confirme que uma conta sem UID liberado recebe acesso negado.
-2. Com a recepção, abra um atendimento e confira a autorização antes de agendar.
-3. Marque uma aplicação passada como realizada. Tente enviar com documentos pendentes; o servidor deve impedir.
-4. Conclua a conferência e encaminhe. A recepção não pode confirmar o recebimento.
-5. Com o faturamento, confirme o recebimento e confira o histórico.
+2. Abra uma guia, marque uma pendência e confirme que ela não avança até a correção.
+3. Registre o envio à operadora. Para autorizar, informe o número da guia e confirme a autorização.
+4. Marque uma aplicação passada como realizada. Tente deixá-la pronta com documentos pendentes; o servidor deve impedir.
+5. Conclua a conferência, registre a entrega ao faturamento e imprima a relação mensal por convênio.
 6. Abra o mesmo registro em duas sessões. Após uma salvar, a outra deve receber conflito e reabrir os detalhes.
-7. Saia da equipe e verifique que os dados reais não permanecem na lista ou nos diálogos.
+7. Saia do setor e verifique que os dados reais não permanecem na lista ou nos diálogos.
 
 O schema e os testes não criam pacientes no banco remoto. Defina também quem administra acessos, backups e correções cadastrais. A versão atual não permite excluir registros nem corrigir os sete dados cadastrais pela interface; essa limitação deve ser considerada antes de utilizá-la na rotina.
 
@@ -89,10 +89,10 @@ Todas as rotas de dados exigem `Authorization: Bearer <ID_TOKEN>` e usuário lib
 | `GET /cases` | Até 100 atendimentos, mais recentes primeiro, e cursor da próxima página |
 | `GET /cases?cursor=...` | Página seguinte; use o cursor retornado, sem montar manualmente |
 | `GET /cases/:id` | Dados, etapa, versão, conferência e histórico |
-| `POST /cases` | Abre atendimento; recebe UUID v4 em `id` e os sete campos em `fields` |
-| `PATCH /cases/:id` | Recebe `version`, `stage` e `checks`; aplica regras e registra evento |
+| `POST /cases` | Cadastra uma guia; recebe UUID v4 em `id` e os campos operacionais em `fields` |
+| `PATCH /cases/:id` | Recebe `version`, `stage`, `fields` editáveis e `checks`; aplica regras e registra evento |
 
-`checks` contém quatro booleanos: `autorizada`, `assinada`, `execucao`, `documentos`. As etapas são `autorizacao`, `agendado`, `realizado`, `faturamento`, `concluido`.
+`checks` contém quatro booleanos: `autorizada`, `assinada`, `execucao`, `documentos`. As etapas são `recebido`, `solicitado`, `agendado`, `realizado`, `conferencia` e `faturamento`. Na interface elas aparecem com nomes orientados à rotina do setor.
 
 Reenviar um cadastro com o mesmo UUID, mesmos campos e mesmo usuário retorna o registro existente. Conflitos de versão retornam `409`. Atualização e evento são gravados juntos; uma falha no lote desfaz ambos. Não há repetição automática de mutações após falha de rede.
 

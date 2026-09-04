@@ -1,7 +1,7 @@
-import {STAGES,CHECKS,ROLES,CONVENIOS,WORKFLOW_FIELD_LABELS,emptyChecks,pending,nextStage,canEdit,localDate,validateCaseFields,applicationLabel,jointLabel} from './domain.js';
-import {$,node,fillOptions,closeDialogs,summary,displayDate} from './ui.js';
-import {DemoStore,ApiStore} from './store.js';
-import {config} from './config.js';
+import {STAGES,CHECKS,ROLES,CONVENIOS,WORKFLOW_FIELD_LABELS,emptyChecks,pending,nextStage,canEdit,localDate,validateCaseFields,applicationLabel,jointLabel} from './domain.js?v=4';
+import {$,node,fillOptions,closeDialogs,summary,displayDate} from './ui.js?v=4';
+import {DemoStore,ApiStore} from './store.js?v=4';
+import {config} from './config.js?v=4';
 fillOptions();closeDialogs();
 let store=new DemoStore(),records=[],reportRecords=[],cursor=null,filter='all',selected=null,epoch=0,busy=false,createId=null,loading=false;
 const configured=Boolean(config.apiUrl && config.firebaseApiKey);
@@ -23,34 +23,31 @@ async function refresh(append=false) {
 }
 const normalize=value=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 const stageLabel=stage=>STAGES.find(([key])=>key===stage)?.[1] || 'Situação não informada';
+const stageHints={all:'Visão geral',pendencia:'Corrigir antes de seguir',recebido:'Cadastrar e conferir',solicitado:'Aguardar operadora',agendado:'Guia liberada',realizado:'Recolher a guia',conferencia:'Tudo conferido',faturamento:'Entrega registrada'};
 function render() {
-  $('#metric-active').textContent=records.filter(r=>r.stage!=='concluido').length;
-  $('#metric-pending').textContent=records.filter(r=>r.stage==='realizado').length;
-  $('#metric-billing').textContent=records.filter(r=>r.stage==='faturamento').length;
-  $('#metric-done').textContent=records.filter(r=>r.stage==='concluido').length;
   const filters=$('#stage-filters');filters.replaceChildren();
-  for(const [key,label] of [['all','Todos'],...STAGES]) {
-    const count=key==='all' ? records.length : records.filter(r=>r.stage===key).length;
-    const button=node('button',label,'filter');button.type='button';button.setAttribute('aria-pressed',String(filter===key));button.append(node('small',count));
+  for(const [key,label] of [['all','Todos'],['pendencia','Com pendência'],...STAGES]) {
+    const count=key==='all' ? records.length : key==='pendencia' ? records.filter(r=>r.fields.pendencia).length : records.filter(r=>r.stage===key).length;
+    const button=node('button',null,`filter status-${key}`);button.type='button';button.setAttribute('aria-pressed',String(filter===key));button.append(node('span',label),node('strong',count),node('small',stageHints[key]));
     button.addEventListener('click',()=>{filter=key;render(); const buttons=[...filters.children];buttons.find(b=>b.getAttribute('aria-pressed')==='true')?.focus();});filters.append(button);
   }
   const query=normalize($('#search').value.trim());
-  const visible=records.filter(r=>(filter==='all'||r.stage===filter) && (!$('#only-pending').checked||r.stage==='realizado') && normalize([r.fields.paciente,r.fields.prontuario,r.fields.convenio,r.fields.articulacao,r.id].filter(Boolean).join(' ')).includes(query));
+  const visible=records.filter(r=>(filter==='all'||(filter==='pendencia'?r.fields.pendencia:r.stage===filter)) && (!$('#only-pending').checked||['realizado','conferencia'].includes(r.stage)) && normalize([r.fields.paciente,r.fields.prontuario,r.fields.numeroGuia,r.fields.convenio,r.fields.articulacao,r.id].filter(Boolean).join(' ')).includes(query));
   const tbody=$('#cases');tbody.replaceChildren();
   for(const record of visible) {
     const tr=node('tr'),patient=node('td');patient.append(node('strong',record.fields.paciente),node('small',record.fields.prontuario ? `Prontuário ${record.fields.prontuario}` : record.id.startsWith('demo-')?record.id.toUpperCase():'AM-'+record.id.slice(0,8).toUpperCase()));
     const joint=node('td',jointLabel(record.fields));joint.append(node('small',record.fields.pedidoRacimed ? `Pedido ${record.fields.pedidoRacimed}` : 'Uma guia para esta articulação'));
-    const date=node('td',applicationLabel(record.fields));date.append(node('small',`${displayDate(record.fields.data)} · ${record.fields.executor}`));
-    const stage=node('td');stage.append(node('span',STAGES.find(([key])=>key===record.stage)[1],'pill '+record.stage));
+    const guide=node('td');guide.append(node('strong',record.fields.numeroGuia || 'Número ainda não informado'),node('small',`${applicationLabel(record.fields)} · ${record.fields.data?displayDate(record.fields.data):'Sem data definida'}`));
+    const stage=node('td');stage.append(node('span',stageLabel(record.stage),'pill '+record.stage));if(record.fields.pendencia)stage.append(node('small','⚠ Pedido com pendência','pending-note'));
     const progress=node('td'),bars=node('div',null,'check-progress');bars.setAttribute('aria-hidden','true');
     for(const checked of Object.values(record.checks)) bars.append(node('i',null,checked?'done':''));
     progress.append(bars,node('small',`${4-pending(record).length}/4 itens conferidos`));
-    const action=node('td'),button=node('button','Abrir →','text-button');button.type='button';button.setAttribute('aria-label',`Abrir atendimento de ${record.fields.paciente}`);button.addEventListener('click',()=>openCase(record.id));action.append(button);
-    tr.append(patient,joint,date,node('td',record.fields.convenio),stage,progress,action);tbody.append(tr);
+    const action=node('td'),button=node('button','Abrir guia →','text-button');button.type='button';button.setAttribute('aria-label',`Abrir guia de ${record.fields.paciente}`);button.addEventListener('click',()=>openCase(record.id));action.append(button);
+    tr.className=`stage-row ${record.stage}${record.fields.pendencia?' has-pending':''}`;tr.append(patient,joint,guide,node('td',record.fields.convenio),stage,progress,action);tbody.append(tr);
   }
-  $('#empty').hidden=visible.length>0;$('#result-count').textContent=`${visible.length} atendimento${visible.length===1?'':'s'}`;
+  $('#empty').hidden=visible.length>0;$('#result-count').textContent=`${visible.length} guia${visible.length===1?'':'s'}`;
   $('#load-more').hidden=!cursor;$('#abrir-novo').disabled=!['recepcao','admin'].includes(store.role);
-  $('#list-note').textContent=store instanceof DemoStore ? 'Somente dados fictícios nesta demonstração.' : `${records.length} atendimentos carregados. Resumo e filtros consideram esta lista.${cursor?' Há mais registros disponíveis.':''}`;
+  $('#list-note').textContent=store instanceof DemoStore ? 'Somente dados fictícios nesta demonstração.' : `${records.length} guias carregadas.${cursor?' Há mais registros disponíveis.':''}`;
 }
 async function openCase(id) {
   if(busy) return;const current=store,run=epoch;busy=true;
@@ -63,27 +60,31 @@ async function openCase(id) {
 function renderDetail() {
   const record=selected;
   $('#case-title').textContent=record.fields.paciente;
-  $('#case-protocol').textContent=`ATENDIMENTO ${record.id.startsWith('demo-')?record.id.toUpperCase():record.id.slice(0,8).toUpperCase()} · VERSÃO ${record.version}`;
+  $('#case-protocol').textContent=`GUIA ${record.id.startsWith('demo-')?record.id.toUpperCase():record.id.slice(0,8).toUpperCase()} · VERSÃO ${record.version}`;
+  $('#case-guide-number').textContent=record.fields.numeroGuia || 'Ainda não informado';
+  $('#case-status').textContent=stageLabel(record.stage);$('#case-status').className=`pill ${record.stage}`;
+  $('#case-guide').value=record.fields.numeroGuia || '';$('#case-date').value=record.fields.data || '';$('#case-observation').value=record.fields.observacao || '';$('#case-pending').checked=Boolean(record.fields.pendencia);
   summary($('#case-summary'),record.fields,WORKFLOW_FIELD_LABELS);
   $('#case-steps').replaceChildren();
   const current=STAGES.findIndex(([key])=>key===record.stage);
   STAGES.forEach(([key,label],i)=>{const li=node('li',label,i===current?'current':i<current?'passed':'');if(i===current)li.setAttribute('aria-current','step');$('#case-steps').append(li);});
-  const patientRecords=records.filter(item=>record.fields.prontuario && item.fields.prontuario===record.fields.prontuario).sort((a,b)=>a.fields.data.localeCompare(b.fields.data));
-  const received=patientRecords.filter(item=>item.stage==='concluido').length;
-  $('#patient-totals').textContent=`${patientRecords.length} guia${patientRecords.length===1?'':'s'} registrada${patientRecords.length===1?'':'s'} · ${received} recebida${received===1?'':'s'} pelo faturamento`;
+  const patientRecords=records.filter(item=>record.fields.prontuario && item.fields.prontuario===record.fields.prontuario).sort((a,b)=>(a.fields.data||'9999').localeCompare(b.fields.data||'9999'));
+  const received=patientRecords.filter(item=>item.stage==='faturamento').length;
+  $('#patient-totals').textContent=`${patientRecords.length} guia${patientRecords.length===1?'':'s'} registrada${patientRecords.length===1?'':'s'} · ${received} entregue${received===1?'':'s'} ao faturamento`;
   $('#patient-history').replaceChildren();
   for(const item of patientRecords) {
-    const tr=node('tr');tr.append(node('td',jointLabel(item.fields)),node('td',item.fields.numeroAplicacao?`${item.fields.numeroAplicacao}ª de 3`:'—'),node('td',displayDate(item.fields.data)),node('td',stageLabel(item.stage)));$('#patient-history').append(tr);
+    const tr=node('tr');tr.append(node('td',jointLabel(item.fields)),node('td',item.fields.numeroAplicacao?`${item.fields.numeroAplicacao}ª de 3`:'—'),node('td',item.fields.numeroGuia||'—'),node('td',item.fields.data?displayDate(item.fields.data):'—'),node('td',stageLabel(item.stage)));$('#patient-history').append(tr);
   }
   const editable=canEdit(record,store.role),checks=$('#case-checks');checks.replaceChildren();
   for(const [key,label] of Object.entries(CHECKS)) {
     const item=node('label',null,'check-item'),input=node('input');input.type='checkbox';input.name=key;input.checked=record.checks[key];input.disabled=!editable;item.append(input,node('span',label));checks.append(item);
   }
   $('#save-checks').hidden=!editable;
-  $('#check-help').textContent=record.stage==='concluido'?'Recebimento confirmado. Histórico disponível para consulta.':record.stage==='faturamento'?'O faturamento confirma o recebimento da documentação já conferida.':'Os quatro itens devem estar conferidos para encaminhar a guia ao faturamento.';
-  const next=nextStage(record.stage),canAdvance=record.stage==='faturamento'?['admin','faturamento'].includes(store.role):editable;
-  $('#advance').hidden=!next || !canAdvance;
-  $('#advance').textContent=({agendado:'Confirmar agendamento',realizado:'Marcar como realizado',faturamento:'Enviar ao faturamento',concluido:'Confirmar recebimento'})[next] || 'Concluído';
+  $('#case-guide').disabled=$('#case-date').disabled=$('#case-observation').disabled=$('#case-pending').disabled=!editable;
+  $('#check-help').textContent=record.stage==='faturamento'?'Entrega registrada. A guia permanece disponível para consulta e impressão.':'Marque somente o que já foi conferido pelo setor.';
+  const next=nextStage(record.stage);
+  $('#advance').hidden=!next || !editable;
+  $('#advance').textContent=({solicitado:'Solicitação enviada',agendado:'Registrar autorização',realizado:'Marcar como realizado',conferencia:'Deixar pronto para faturamento',faturamento:'Registrar entrega ao faturamento'})[next] || 'Avançar etapa';
   $('#case-message').textContent='';$('#case-history').replaceChildren();
   for(const event of [...record.events].reverse()) {
     const item=node('li',event.action),date=new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short'}).format(new Date(event.at));
@@ -94,11 +95,12 @@ async function save(advance=false) {
   if(busy || !selected) return;busy=true;
   const current=store,run=epoch,previous=selected;
   const checks=Object.fromEntries([...$('#case-checks').querySelectorAll('input')].map(i=>[i.name,i.checked]));
+  const fields={numeroGuia:$('#case-guide').value,data:$('#case-date').value,observacao:$('#case-observation').value,pendencia:$('#case-pending').checked};
   $('#save-checks').disabled=$('#advance').disabled=true;
   try {
-    const updated=await current.update(previous.id,{version:previous.version,checks,stage:advance?nextStage(previous.stage):previous.stage});
+    const updated=await current.update(previous.id,{version:previous.version,fields,checks,stage:advance?nextStage(previous.stage):previous.stage});
     if(run!==epoch) return;
-    selected=updated;records=records.map(r=>r.id===updated.id?updated:r);render();renderDetail();$('#case-message').textContent=advance?'Etapa atualizada e registrada no histórico.':'Conferência salva no histórico.';
+    selected=updated;records=records.map(r=>r.id===updated.id?updated:r);render();renderDetail();$('#case-message').textContent=advance?'Situação atualizada automaticamente no histórico.':'Alterações salvas no histórico.';
   } catch(error) {
     if(run===epoch) {if(error.status===401)displayError(error);else $('#case-message').textContent=error.status===409?'Este atendimento mudou. Feche e reabra os detalhes para carregar a versão atual.':error.message || 'Não foi possível salvar. Reabra o atendimento para conferir antes de tentar novamente.';}
   } finally {busy=false;$('#save-checks').disabled=$('#advance').disabled=false;}
@@ -109,13 +111,12 @@ detail.querySelector('[data-close]').addEventListener('click',()=>{selected=null
 $('#search').addEventListener('input',render);$('#only-pending').addEventListener('change',render);
 $('#clear-filters').addEventListener('click',()=>{filter='all';$('#search').value='';$('#only-pending').checked=false;render();});
 $('#refresh').addEventListener('click',()=>{report('');refresh();});$('#load-more').addEventListener('click',()=>refresh(true));
-$('#role').addEventListener('change',()=>{store.role=$('#role').value;render();});
 function resetDemo() {
   epoch++;store.clear?.();store=new DemoStore();records=[];reportRecords=[];cursor=null;filter='all';selected=null;busy=false;
   $('#patient-history').replaceChildren();$('#patient-totals').textContent='';$('#report-preview').replaceChildren();$('#print-sheet').replaceChildren();
-  $('#role').value='recepcao';$('#search').value='';$('#only-pending').checked=false;$('#demo-controls').hidden=false;
+  $('#search').value='';$('#only-pending').checked=false;$('#demo-controls').hidden=false;
   $('#mode-banner').replaceChildren(node('span','Demonstração interativa · Dados fictícios. As alterações ficam só nesta aba.'));
-  const login=node('button','Acesso da equipe →','text-button');login.type='button';login.addEventListener('click',openLogin);$('#mode-banner').append(login);
+  const login=node('button','Acesso do setor →','text-button');login.type='button';login.addEventListener('click',openLogin);$('#mode-banner').append(login);
   render(); loading=false;refresh();
 }
 function signOut() {document.querySelectorAll('dialog[open]').forEach(d=>d.close());newForm.reset();$('#login-form').reset();$('#case-summary').replaceChildren();$('#case-history').replaceChildren();$('#case-title').textContent='';$('#case-checks').replaceChildren();resetDemo();}
@@ -125,7 +126,7 @@ newForm.elements.articulacao.addEventListener('change',()=>{
   $('#outra-articulacao').hidden=!other;newForm.elements.articulacaoOutra.required=other;if(!other)newForm.elements.articulacaoOutra.value='';
 });
 $('#abrir-novo').addEventListener('click',()=>{
-  newForm.reset();newForm.elements.data.value=localDate();newForm.elements.atendente.value=store instanceof DemoStore?'Equipe de demonstração':'';
+  newForm.reset();newForm.elements.atendente.value=store instanceof DemoStore?'Equipe de demonstração':'';
   createId=crypto.randomUUID();$('#new-error').textContent='';$('#new-notice').textContent=store instanceof DemoStore?'Use dados fictícios. Este cadastro não envia informações à planilha ou à clínica.':'Este cadastro abre o acompanhamento no painel. O envio do formulário à planilha é uma operação separada.';newDialog.showModal();
 });
 newForm.addEventListener('submit',async e=>{
@@ -134,7 +135,7 @@ newForm.addEventListener('submit',async e=>{
   try {
     const fields=validateCaseFields(Object.fromEntries(new FormData(newForm)));
     const record=await current.create({id:createId,fields});if(run!==epoch)return;
-    records=[record,...records.filter(r=>r.id!==record.id)];render();newDialog.close();selected=record;renderDetail();detail.showModal();report('Atendimento aberto para acompanhamento.');
+    records=[record,...records.filter(r=>r.id!==record.id)];render();newDialog.close();selected=record;renderDetail();detail.showModal();report('Guia cadastrada no controle do setor.');
   } catch(error){if(run===epoch){if(error.status===401)displayError(error);else $('#new-error').textContent=error.message || 'Não foi possível confirmar o cadastro. Confira a fila antes de tentar novamente.';}}
   finally{busy=false;$('#create-case').disabled=false;}
 });
@@ -151,8 +152,8 @@ function monthName(value) {
   return new Intl.DateTimeFormat('pt-BR',{month:'long',year:'numeric'}).format(new Date(Number(year),Number(month)-1,1));
 }
 function reportFilter(item,type) {
-  if(type==='delivery')return ['faturamento','concluido'].includes(item.stage);
-  if(type==='pending')return !['faturamento','concluido'].includes(item.stage);
+  if(type==='delivery')return item.stage==='faturamento';
+  if(type==='pending')return item.stage!=='faturamento';
   return true;
 }
 function reportTitle(type) {return {complete:'Movimento completo',delivery:'Relação de entrega ao faturamento',pending:'Pendências do mês'}[type];}
@@ -163,8 +164,8 @@ function buildReportGroup(insurer,items,month,type) {
   const meta=node('div',null,'print-meta');
   meta.append(node('span',`Convênio: ${insurer}`),node('span',`Referência: ${month.replace('-','')}-${normalize(insurer).replace(/[^a-z0-9]/g,'').slice(0,8).toUpperCase()}`),node('span',`Emitido em: ${new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short'}).format(new Date())}`));section.append(meta);
   const table=node('table',null,'print-table'),thead=node('thead'),head=node('tr');
-  for(const label of ['Nº','Paciente','Prontuário','Médico','Articulação','Lado','Aplicação','Data','Situação'])head.append(node('th',label));thead.append(head);table.append(thead);
-  const body=node('tbody');items.forEach((item,index)=>{const tr=node('tr');for(const value of [String(index+1).padStart(2,'0'),item.fields.paciente,item.fields.prontuario||'—',item.fields.executor,item.fields.articulacao||'—',item.fields.lado||'—',item.fields.numeroAplicacao?`${item.fields.numeroAplicacao}ª de 3`:'—',displayDate(item.fields.data),stageLabel(item.stage)])tr.append(node('td',value));body.append(tr);});table.append(body);section.append(table);
+  for(const label of ['Nº','Paciente','Prontuário','Nº da guia','Médico','Articulação','Lado','Aplicação','Data','Situação'])head.append(node('th',label));thead.append(head);table.append(thead);
+  const body=node('tbody');items.forEach((item,index)=>{const tr=node('tr');for(const value of [String(index+1).padStart(2,'0'),item.fields.paciente,item.fields.prontuario||'—',item.fields.numeroGuia||'—',item.fields.executor,item.fields.articulacao||'—',item.fields.lado||'—',item.fields.numeroAplicacao?`${item.fields.numeroAplicacao}ª de 3`:'—',item.fields.data?displayDate(item.fields.data):'—',stageLabel(item.stage)])tr.append(node('td',value));body.append(tr);});table.append(body);section.append(table);
   const totals=node('div',null,'print-totals'),joints=new Map();for(const item of items)joints.set(item.fields.articulacao||'Não informada',(joints.get(item.fields.articulacao||'Não informada')||0)+1);
   totals.append(node('strong',`Total: ${items.length} guia${items.length===1?'':'s'}`),node('span',[...joints].map(([joint,count])=>`${joint}: ${count}`).join(' · ')));section.append(totals);
   if(type==='delivery') {
@@ -196,10 +197,11 @@ async function openReports() {
   } catch(error){displayError(error);}finally{busy=false;$('#abrir-relatorios').disabled=false;}
 }
 $('#abrir-relatorios').addEventListener('click',openReports);
+$('#nav-reports').addEventListener('click',event=>{event.preventDefault();openReports();});
 for(const id of ['#report-month','#report-type','#report-insurer'])$(id).addEventListener('change',renderReport);
 $('#print-report').addEventListener('click',()=>{if(!$('#print-sheet').children.length)return;window.print();});
 function openLogin() {
-  $('#login-note').textContent=configured?'Entre com a conta autorizada da equipe. A sessão permanece somente nesta aba.':'O painel público está em modo demonstração. O acesso da equipe depende da configuração do backend e da liberação dos usuários.';
+  $('#login-note').textContent=configured?'Entre com a conta autorizada do setor. A sessão permanece somente nesta aba.':'O painel público está em modo demonstração. O acesso do setor depende da configuração do banco e da liberação dos usuários.';
   $('#login-form').hidden=!configured;$('#login-error').textContent='';$('#login-dialog').showModal();
 }
 $('#entrar-equipe').addEventListener('click',openLogin);

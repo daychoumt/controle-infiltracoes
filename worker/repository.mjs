@@ -5,12 +5,13 @@ export const SQL={
   get:'SELECT * FROM cases WHERE id = ?',
   list:'SELECT * FROM cases WHERE (? = 0 OR created_at < ? OR (created_at = ? AND id < ?)) ORDER BY created_at DESC, id DESC LIMIT 101',
   events:'SELECT at, role AS actor, actor_uid AS actorUid, action FROM events WHERE case_id = ? ORDER BY version ASC',
-  create:'INSERT INTO cases (id, payload, stage, checks, version, created_at, updated_at, created_by) VALUES (?, ?, ?, ?, 1, ?, ?, ?)',
+  create:'INSERT INTO cases (id, payload, stage, stage_v2, checks, version, created_at, updated_at, created_by) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)',
   createEvent:'INSERT INTO events (case_id, version, at, actor_uid, role, action) VALUES (?, 1, ?, ?, ?, ?)',
   updateEvent:'INSERT INTO events (case_id, version, at, actor_uid, role, action) SELECT id, version + 1, ?, ?, ?, ? FROM cases WHERE id = ? AND version = ?',
-  update:'UPDATE cases SET stage = ?, checks = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?'
+  update:'UPDATE cases SET payload = ?, stage = ?, stage_v2 = ?, checks = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?'
 };
-const decode=row=>({id:row.id,fields:JSON.parse(row.payload),stage:row.stage,checks:JSON.parse(row.checks),version:row.version,createdAt:row.created_at,updatedAt:row.updated_at});
+const legacyStage=stage=>({recebido:'autorizacao',solicitado:'autorizacao',agendado:'agendado',realizado:'realizado',conferencia:'faturamento',faturamento:'concluido'})[stage] || 'autorizacao';
+const decode=row=>({id:row.id,fields:JSON.parse(row.payload),stage:row.stage_v2 || ({autorizacao:'solicitado',concluido:'faturamento'}[row.stage] || row.stage),checks:JSON.parse(row.checks),version:row.version,createdAt:row.created_at,updatedAt:row.updated_at});
 export class Repository {
   constructor(db){this.db=db;}
   stmt(key,...values){return this.db.prepare(SQL[key]).bind(...values);}
@@ -33,7 +34,7 @@ export class Repository {
       return this.get(record.id);
     }
     await this.db.batch([
-      this.stmt('create',record.id,JSON.stringify(record.fields),record.stage,JSON.stringify(record.checks),record.createdAt,record.updatedAt,user.uid),
+      this.stmt('create',record.id,JSON.stringify(record.fields),legacyStage(record.stage),record.stage,JSON.stringify(record.checks),record.createdAt,record.updatedAt,user.uid),
       this.stmt('createEvent',record.id,record.createdAt,user.uid,user.role,eventLabel(null,record))
     ]);
     return this.get(record.id);
@@ -41,7 +42,7 @@ export class Repository {
   async update(previous,updated,user) {
     const result=await this.db.batch([
       this.stmt('updateEvent',updated.updatedAt,user.uid,user.role,eventLabel(previous,updated),previous.id,previous.version),
-      this.stmt('update',updated.stage,JSON.stringify(updated.checks),updated.updatedAt,previous.id,previous.version)
+      this.stmt('update',JSON.stringify(updated.fields),legacyStage(updated.stage),updated.stage,JSON.stringify(updated.checks),updated.updatedAt,previous.id,previous.version)
     ]);
     if(result[1].meta.changes!==1)throw problem(409,'Este atendimento foi atualizado. Reabra os detalhes antes de alterar.');
     return this.get(previous.id);

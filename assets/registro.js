@@ -1,5 +1,5 @@
-import {validateFields, localDate} from './domain.js';
-import {$,fillOptions,summary,closeDialogs} from './ui.js';
+import {validateFields, localDate} from './domain.js?v=4';
+import {$,fillOptions,summary,closeDialogs} from './ui.js?v=4';
 fillOptions(); closeDialogs();
 const form=$('#registro'), dialog=$('#confirmacao'), status=$('#status'), send=$('#enviar');
 let payload=null, sending=false, sent=false;

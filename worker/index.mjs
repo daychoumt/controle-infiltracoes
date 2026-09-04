@@ -36,11 +36,11 @@ export async function handle(request,env,dependencies={}) {
     if(match && !uuid.test(match[1]))throw problem(400,'Protocolo inválido.');
     if(match && request.method==='GET')return reply(200,await repository.get(match[1]));
     if(url.pathname==='/cases' && request.method==='POST') {
-      if(!['admin','recepcao'].includes(user.role))throw problem(403,'A abertura de atendimentos é feita pela recepção.');
+      if(!['admin','recepcao'].includes(user.role))throw problem(403,'A abertura de guias é feita pelo setor de autorizações.');
       const input=await readJson(request);
       if(!input || !uuid.test(input.id))throw problem(400,'Protocolo inválido.');
       const fields=validateCaseFields(input.fields),at=new Date().toISOString();
-      return reply(201,await repository.create({id:input.id,fields,stage:'autorizacao',checks:emptyChecks(),version:1,createdAt:at,updatedAt:at},user));
+      return reply(201,await repository.create({id:input.id,fields,stage:'recebido',checks:emptyChecks(),version:1,createdAt:at,updatedAt:at},user));
     }
     if(match && request.method==='PATCH') {
       const input=await readJson(request),previous=await repository.get(match[1]);

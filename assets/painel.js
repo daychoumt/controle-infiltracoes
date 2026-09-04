@@ -1,11 +1,15 @@
-import {STAGES,CHECKS,ROLES,WORKFLOW_FIELD_LABELS,emptyChecks,pending,nextStage,canEdit,localDate,applicationLabel,jointLabel,processLabel} from './domain.js?v=6';
-import {$,node,fillOptions,closeDialogs,summary,displayDate} from './ui.js?v=6';
-import {DemoStore,ApiStore} from './store.js?v=6';
-import {config} from './config.js?v=6';
+import {STAGES,CHECKS,ROLES,WORKFLOW_FIELD_LABELS,emptyChecks,pending,nextStage,canEdit,localDate,applicationLabel,jointLabel,processLabel} from './domain.js?v=7';
+import {$,node,fillOptions,closeDialogs,summary,displayDate} from './ui.js?v=7';
+import {DemoStore,ApiStore} from './store.js?v=7';
+import {config} from './config.js?v=7';
 fillOptions();closeDialogs();
 let store=new DemoStore(),records=[],reportRecords=[],cursor=null,filter='all',selected=null,epoch=0,busy=false,createId=null,loading=false;
 const configured=Boolean(config.apiUrl && config.firebaseApiKey);
 const status=$('#status'),detail=$('#case-dialog'),newDialog=$('#new-dialog'),newForm=$('#new-case');
+const profileDialog=$('#profile-dialog'),profileForm=$('#profile-form'),processDialog=$('#process-dialog'),processForm=$('#process-form'),cancelDialog=$('#cancel-dialog'),cancelForm=$('#cancel-form');
+const editProfileButton=node('button','Editar perfil','text-button');editProfileButton.type='button';$('.patient-overview>div:first-child').append(editProfileButton);
+const editCaseButton=node('button','Corrigir dados desta infiltração','button secondary');editCaseButton.type='button';$('#advance').before(editCaseButton);
+const cancelCaseButton=node('button','Cancelar esta infiltração','button secondary danger-outline');cancelCaseButton.type='button';$('#advance').before(cancelCaseButton);
 function report(message) {status.textContent=message;}
 function displayError(error) {
   if(error.status===401) {signOut();report('Sua sessão expirou. Entre novamente para consultar a equipe.');}
@@ -27,9 +31,9 @@ const applicationDate=fields=>fields.dataAplicacao || fields.data || '';
 const requestDate=fields=>fields.dataPedido || '';
 const billingDate=fields=>fields.dataFaturamento || '';
 const STALE_DAYS=3;
-const staleDays=record=>record.stage==='faturamento'?0:Math.max(0,Math.floor((Date.now()-new Date(record.updatedAt).getTime())/86400000));
+const staleDays=record=>['faturamento','cancelado'].includes(record.stage)?0:Math.max(0,Math.floor((Date.now()-new Date(record.updatedAt).getTime())/86400000));
 const isStale=record=>staleDays(record)>=STALE_DAYS;
-const stageHints={all:'Visão geral',pendencia:'Corrigir antes de seguir',sem_atualizacao:'Precisam de acompanhamento',recebido:'Cadastrar e conferir',solicitado:'Aguardar operadora',agendado:'Guia liberada',realizado:'Recolher a guia',conferencia:'Tudo conferido',faturamento:'Entrega registrada'};
+const stageHints={all:'Visão geral',pendencia:'Corrigir antes de seguir',sem_atualizacao:'Precisam de acompanhamento',recebido:'Cadastrar e conferir',solicitado:'Aguardar operadora',agendado:'Guia liberada',realizado:'Recolher a guia',conferencia:'Tudo conferido',faturamento:'Entrega registrada',cancelado:'Processo encerrado'};
 function render() {
   const filters=$('#stage-filters');filters.replaceChildren();
   const groups=[
@@ -83,19 +87,25 @@ function renderDetail() {
   summary($('#case-summary'),record.fields,WORKFLOW_FIELD_LABELS);
   $('#case-steps').replaceChildren();
   const current=STAGES.findIndex(([key])=>key===record.stage);
-  STAGES.forEach(([key,label],i)=>{const li=node('li',label,i===current?'current':i<current?'passed':'');if(i===current)li.setAttribute('aria-current','step');$('#case-steps').append(li);});
+  STAGES.forEach(([key,label],i)=>{const state=i===current?'current':record.stage!=='cancelado'&&i<current?'passed':'';const li=node('li',label,state);if(i===current)li.setAttribute('aria-current','step');$('#case-steps').append(li);});
   const patientRecords=records.filter(item=>record.fields.prontuario && item.fields.prontuario===record.fields.prontuario).sort((a,b)=>(applicationDate(a.fields)||'9999').localeCompare(applicationDate(b.fields)||'9999'));
-  const received=patientRecords.filter(item=>item.stage==='faturamento').length;
-  $('#patient-totals').textContent=`${patientRecords.length} guia${patientRecords.length===1?'':'s'} registrada${patientRecords.length===1?'':'s'} · ${received} entregue${received===1?'':'s'} ao faturamento`;
+  const received=patientRecords.filter(item=>item.stage==='faturamento').length,cancelled=patientRecords.filter(item=>item.stage==='cancelado').length;
+  $('#patient-totals').textContent=`${patientRecords.length} processo${patientRecords.length===1?'':'s'} · ${received} entregue${received===1?'':'s'} ao faturamento${cancelled?` · ${cancelled} cancelado${cancelled===1?'':'s'}`:''}`;
   $('#patient-history').replaceChildren();
   for(const item of patientRecords) {
-    const tr=node('tr');tr.append(node('td',jointLabel(item.fields)),node('td',item.fields.numeroAplicacao?`${item.fields.numeroAplicacao}ª de 3`:'—'),node('td',item.fields.numeroGuia||'—'),node('td',applicationDate(item.fields)?displayDate(applicationDate(item.fields)):'—'),node('td',stageLabel(item.stage)));$('#patient-history').append(tr);
+    const tr=node('tr'),statusCell=node('td'),open=node('button',item.id===record.id?'Processo aberto':'Abrir processo','text-button');
+    open.type='button';open.disabled=item.id===record.id;open.addEventListener('click',()=>{selected=item;renderDetail();});
+    statusCell.append(node('span',stageLabel(item.stage),'pill '+item.stage),open);
+    tr.append(node('td',jointLabel(item.fields)),node('td',item.fields.numeroAplicacao?`${item.fields.numeroAplicacao}ª de 3`:'—'),node('td',item.fields.numeroGuia||'—'),node('td',applicationDate(item.fields)?displayDate(applicationDate(item.fields)):'—'),statusCell);$('#patient-history').append(tr);
   }
   const editable=canEdit(record,store.role),checks=$('#case-checks');checks.replaceChildren();
   for(const [key,label] of Object.entries(CHECKS)) {
     const item=node('label',null,'check-item'),input=node('input');input.type='checkbox';input.name=key;input.checked=record.checks[key];input.disabled=!editable;item.append(input,node('span',label));checks.append(item);
   }
   $('#save-checks').hidden=!editable;
+  editProfileButton.hidden=!['recepcao','admin'].includes(store.role);
+  editCaseButton.hidden=!editable;
+  cancelCaseButton.hidden=!editable;
   $('#case-guide').disabled=$('#case-date').disabled=$('#case-condition').disabled=$('#case-observation').disabled=!editable;
   $('#check-help').textContent=record.stage==='faturamento'?'Entrega registrada. A guia permanece disponível para consulta e impressão.':'Marque somente o que já foi conferido pelo setor.';
   const next=nextStage(record.stage);
@@ -122,6 +132,62 @@ async function save(advance=false) {
   } finally {busy=false;$('#save-checks').disabled=$('#advance').disabled=false;}
 }
 $('#case-form').addEventListener('submit',e=>{e.preventDefault();save();});$('#advance').addEventListener('click',()=>save(true));
+editProfileButton.addEventListener('click',()=>{
+  if(!selected)return;
+  profileForm.elements.prontuario.value=selected.fields.prontuario;
+  profileForm.elements.paciente.value=selected.fields.paciente;
+  profileForm.elements.convenio.value=selected.fields.convenio;
+  $('#profile-error').textContent='';profileDialog.showModal();
+});
+profileForm.addEventListener('submit',async event=>{
+  event.preventDefault();if(busy||!selected)return;busy=true;$('#save-profile').disabled=true;$('#profile-error').textContent='';
+  const chart=selected.fields.prontuario,current=store,run=epoch;
+  try {
+    const {patient}=await current.updatePatient(chart,{paciente:profileForm.elements.paciente.value,convenio:profileForm.elements.convenio.value});
+    if(run!==epoch)return;
+    records=records.map(record=>record.fields.prontuario===chart?{...record,fields:{...record.fields,paciente:patient.paciente,convenio:patient.convenio}}:record);
+    selected=records.find(record=>record.id===selected.id) || selected;profileDialog.close();render();renderDetail();report('Perfil do paciente corrigido em todas as guias.');
+  } catch(error){if(run===epoch)$('#profile-error').textContent=error.message || 'Não foi possível corrigir o perfil.';}
+  finally{busy=false;$('#save-profile').disabled=false;}
+});
+function toggleProcessJoint() {
+  const other=processForm.elements.articulacao.value==='Outra articulação';
+  $('#process-other-joint').hidden=!other;processForm.elements.articulacaoOutra.required=other;if(!other)processForm.elements.articulacaoOutra.value='';
+}
+processForm.elements.articulacao.addEventListener('change',toggleProcessJoint);
+editCaseButton.addEventListener('click',()=>{
+  if(!selected)return;processForm.reset();
+  const fields=selected.fields,isListed=[...processForm.elements.articulacao.options].some(option=>option.value===fields.articulacao);
+  processForm.elements.pedidoRacimed.value=fields.pedidoRacimed || '';processForm.elements.dataPedido.value=requestDate(fields);
+  processForm.elements.articulacao.value=isListed?fields.articulacao:'Outra articulação';processForm.elements.articulacaoOutra.value=isListed?'':fields.articulacao;
+  processForm.elements.lado.value=fields.lado;processForm.elements.numeroAplicacao.value=fields.numeroAplicacao;processForm.elements.medicacao.value=fields.medicacao || '';processForm.elements.executor.value=fields.executor;
+  toggleProcessJoint();if(!isListed)processForm.elements.articulacaoOutra.value=fields.articulacao;
+  $('#process-error').textContent='';processDialog.showModal();
+});
+processForm.addEventListener('submit',async event=>{
+  event.preventDefault();if(busy||!selected)return;busy=true;$('#save-process').disabled=true;$('#process-error').textContent='';
+  const previous=selected,current=store,run=epoch,fields=Object.fromEntries(new FormData(processForm));
+  try {
+    const updated=await current.update(previous.id,{version:previous.version,stage:previous.stage,checks:previous.checks,fields});
+    if(run!==epoch)return;
+    selected=updated;records=records.map(record=>record.id===updated.id?updated:record);processDialog.close();render();renderDetail();report('Dados corrigidos somente nesta infiltração.');
+  } catch(error){if(run===epoch)$('#process-error').textContent=error.message || 'Não foi possível corrigir este processo.';}
+  finally{busy=false;$('#save-process').disabled=false;}
+});
+cancelCaseButton.addEventListener('click',()=>{
+  if(!selected)return;
+  cancelForm.reset();$('#cancel-error').textContent='';$('#cancel-process').textContent=`${jointLabel(selected.fields)} · ${applicationLabel(selected.fields)}. Somente este processo será cancelado.`;cancelDialog.showModal();
+});
+cancelForm.addEventListener('submit',async event=>{
+  event.preventDefault();if(busy||!selected)return;busy=true;$('#confirm-cancel').disabled=true;$('#cancel-error').textContent='';
+  const previous=selected,current=store,run=epoch;
+  try {
+    const updated=await current.update(previous.id,{version:previous.version,stage:'cancelado',checks:previous.checks,fields:{numeroGuia:$('#case-guide').value,dataAplicacao:$('#case-date').value,condicaoProcesso:'cancelado',observacao:cancelForm.elements.motivo.value}});
+    if(run!==epoch)return;
+    selected=updated;records=records.map(record=>record.id===updated.id?updated:record);cancelDialog.close();render();renderDetail();report('Somente a infiltração selecionada foi cancelada. As demais continuam ativas.');
+  } catch(error){if(run===epoch)$('#cancel-error').textContent=error.message || 'Não foi possível cancelar este processo.';}
+  finally{busy=false;$('#confirm-cancel').disabled=false;}
+});
 detail.addEventListener('cancel',e=>{if(busy)e.preventDefault();});
 detail.querySelector('[data-close]').addEventListener('click',()=>{selected=null;});
 $('#search').addEventListener('input',render);$('#only-pending').addEventListener('change',render);
@@ -191,7 +257,7 @@ function monthName(value) {
 }
 function reportFilter(item,type) {
   if(type==='delivery')return item.stage==='faturamento';
-  if(type==='open')return item.stage!=='faturamento';
+  if(type==='open')return !['faturamento','cancelado'].includes(item.stage);
   if(type==='pending')return Boolean(item.fields.pendencia);
   return true;
 }

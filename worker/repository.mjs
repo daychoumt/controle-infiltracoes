@@ -8,6 +8,9 @@ export const SQL={
   events:'SELECT at, role AS actor, actor_uid AS actorUid, action FROM events WHERE case_id = ? ORDER BY version ASC',
   create:'INSERT INTO cases (id, payload, stage, stage_v2, checks, version, created_at, updated_at, created_by) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)',
   createPatient:'INSERT OR IGNORE INTO patients (prontuario, paciente, convenio, created_at, updated_at, created_by) VALUES (?, ?, ?, ?, ?, ?)',
+  updatePatient:'UPDATE patients SET paciente = ?, convenio = ?, updated_at = ?, updated_by = ? WHERE prontuario = ?',
+  updatePatientCases:"UPDATE cases SET payload = json_set(payload, '$.paciente', ?, '$.convenio', ?) WHERE json_extract(payload, '$.prontuario') = ?",
+  createPatientEvent:'INSERT INTO patient_events (prontuario, at, actor_uid, action) VALUES (?, ?, ?, ?)',
   createEvent:'INSERT INTO events (case_id, version, at, actor_uid, role, action) VALUES (?, 1, ?, ?, ?, ?)',
   updateEvent:'INSERT INTO events (case_id, version, at, actor_uid, role, action) SELECT id, version + 1, ?, ?, ?, ? FROM cases WHERE id = ? AND version = ?',
   update:'UPDATE cases SET payload = ?, stage = ?, stage_v2 = ?, checks = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?'
@@ -32,6 +35,18 @@ export class Repository {
   async patient(prontuario) {
     const row=await this.stmt('patient',prontuario).first();
     return row?{prontuario:row.prontuario,paciente:row.paciente,convenio:row.convenio}:null;
+  }
+  async updatePatient(prontuario,profile,user) {
+    const at=new Date().toISOString(),previous=await this.patient(prontuario);
+    if(!previous)throw problem(404,'Paciente não encontrado.');
+    const action=`Perfil corrigido: ${previous.paciente} / ${previous.convenio} → ${profile.paciente} / ${profile.convenio}`;
+    const result=await this.db.batch([
+      this.stmt('updatePatient',profile.paciente,profile.convenio,at,user.uid,prontuario),
+      this.stmt('updatePatientCases',profile.paciente,profile.convenio,prontuario),
+      this.stmt('createPatientEvent',prontuario,at,user.uid,action)
+    ]);
+    if(result[0].meta.changes!==1)throw problem(409,'O perfil do paciente mudou. Reabra antes de corrigir.');
+    return this.patient(prontuario);
   }
   async create(record,user) {
     const existing=await this.stmt('get',record.id).first();

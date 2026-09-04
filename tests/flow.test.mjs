@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {transition,emptyChecks,validateFields,validateCaseFields,validDate,jointLabel} from '../assets/domain.js';
 import {DemoStore} from '../assets/store.js';
-const fields={paciente:'Paciente de teste',convenio:'Particular',medicacao:'',aplicacao:'Procedimento de teste',numeroGuia:'GUIA-1',pendencia:false,observacao:'',data:'2026-01-01',executor:'Dr. Exemplo A',atendente:'Autorizações'};
+const fields={prontuario:'AB-102',paciente:'Paciente de teste',convenio:'Particular',medicacao:'',articulacao:'Joelho',lado:'Direito',numeroAplicacao:'1',pedidoRacimed:'RC-1',aplicacao:'1ª aplicação · Joelho direito',numeroGuia:'GUIA-1',pendencia:false,condicaoProcesso:'regular',observacao:'',dataPedido:'2025-12-20',dataAplicacao:'2026-01-01',data:'2026-01-01',executor:'Dr. Exemplo A',atendente:'Autorizações'};
 const all={autorizada:true,assinada:true,execucao:true,documentos:true};
 const record=(stage='recebido',checks=emptyChecks())=>({fields,stage,checks,version:1});
 const workflowFields={prontuario:'ab-102',paciente:'Paciente de teste',convenio:'Particular',medicacao:'',articulacao:'Joelho',lado:'Direito',numeroAplicacao:'2',pedidoRacimed:'RC-9',condicaoProcesso:'regular',observacao:'',dataPedido:'2025-12-20',dataAplicacao:'2026-01-01',executor:'Dr. Exemplo A',atendente:'Autorizações'};
@@ -35,7 +35,7 @@ test('não registra autorização sem confirmação ou número da guia',()=>{
   assert.throws(()=>transition({...record('solicitado',{...emptyChecks(),autorizada:true}),fields:{...fields,numeroGuia:''}},{version:1,stage:'agendado'},'recepcao'),{status:400});
 });
 test('não permite pular etapas',()=>assert.throws(()=>transition(record('recebido',all),{version:1,stage:'agendado'},'admin'),{status:400}));
-test('aplicação futura não pode ser marcada como realizada',()=>assert.throws(()=>transition({...record('agendado',all),fields:{...fields,data:'2099-01-01'}},{version:1,stage:'realizado'},'admin'),{status:400}));
+test('aplicação futura não pode ser marcada como realizada',()=>assert.throws(()=>transition({...record('agendado',all),fields:{...fields,dataAplicacao:'2099-01-01',data:'2099-01-01'}},{version:1,stage:'realizado'},'admin'),{status:400}));
 test('todos os documentos são necessários para deixar a guia pronta',()=>{
   for(const missing of Object.keys(all))assert.throws(()=>transition(record('realizado',{...all,[missing]:false}),{version:1,stage:'conferencia'},'recepcao'),{status:400});
 });
@@ -78,4 +78,16 @@ test('cadastro aparece imediatamente na fila e reaproveita o perfil do paciente'
   await demo.create({id,fields:workflowFields});
   const list=await demo.list(),saved=list.items.find(item=>item.id===id),profile=await demo.patient('AB-102');
   assert.equal(saved.fields.paciente,'Paciente de teste');assert.equal(profile.patient.convenio,'Particular');
+});
+test('perfil é corrigido em todas as guias, mas só a infiltração escolhida é cancelada',async()=>{
+  const demo=new DemoStore(),ana=(await demo.list()).items.filter(item=>item.fields.prontuario==='10021');
+  assert.ok(ana.length>1);
+  await demo.updatePatient('10021',{paciente:'Ana Corrigida',convenio:'Particular'});
+  const corrected=(await demo.list()).items.filter(item=>item.fields.prontuario==='10021');
+  assert.ok(corrected.every(item=>item.fields.paciente==='Ana Corrigida'&&item.fields.convenio==='Particular'));
+  const target=corrected[0],other=corrected[1];
+  const changed=await demo.update(target.id,{version:target.version,stage:target.stage,checks:target.checks,fields:{articulacao:'Punho',lado:'Direito',numeroAplicacao:'3',pedidoRacimed:'RC-CORRIGIDO',dataPedido:'2026-01-02',medicacao:'Medicação Exemplo B',executor:'Dra. Exemplo B'}});
+  assert.equal(changed.fields.articulacao,'Punho');assert.notEqual((await demo.detail(other.id)).fields.articulacao,'Punho');
+  await demo.update(target.id,{version:changed.version,stage:'cancelado',checks:changed.checks,fields:{condicaoProcesso:'cancelado',observacao:'Paciente desistiu deste procedimento'}});
+  assert.equal((await demo.detail(target.id)).stage,'cancelado');assert.notEqual((await demo.detail(other.id)).stage,'cancelado');
 });

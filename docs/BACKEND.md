@@ -103,6 +103,7 @@ Todas as rotas de dados exigem `Authorization: Bearer <ID_TOKEN>` e usuário lib
 | `GET /session` | Perfil autorizado no servidor |
 | `GET /references` | Listas de convênios, medicamentos e médicos após autenticação |
 | `GET /patient?prontuario=...` | Perfil mínimo do paciente para reaproveitar nome e convênio no cadastro |
+| `PATCH /patient` | Corrige nome e convênio do perfil e atualiza todas as guias do prontuário |
 | `GET /cases` | Até 100 atendimentos, mais recentes primeiro, e cursor da próxima página |
 | `GET /cases?cursor=...` | Página seguinte; use o cursor retornado, sem montar manualmente |
 | `GET /cases/:id` | Dados, etapa, versão, conferência e histórico |
@@ -111,7 +112,7 @@ Todas as rotas de dados exigem `Authorization: Bearer <ID_TOKEN>` e usuário lib
 
 `checks` contém quatro booleanos: `autorizada`, `assinada`, `execucao`, `documentos`. As etapas são `recebido`, `solicitado`, `agendado`, `realizado`, `conferencia` e `faturamento`. Na interface elas aparecem separadas entre autorizações e pós-procedimento. Cada processo guarda `dataPedido`, `dataAplicacao` e `dataFaturamento`; a última é preenchida automaticamente na entrega final.
 
-O prontuário é a chave única da tabela `patients`. Joelho direito, joelho esquerdo e ombro direito do mesmo paciente continuam sendo três processos independentes na tabela `cases`, com guias, aplicações e situações próprias.
+O prontuário é a chave única da tabela `patients`. Joelho direito, joelho esquerdo e ombro direito do mesmo paciente continuam sendo três processos independentes na tabela `cases`, com guias, aplicações e situações próprias. A etapa `cancelado` encerra apenas o processo selecionado, exige motivo e não apaga o histórico.
 
 Reenviar um cadastro com o mesmo UUID, mesmos campos e mesmo usuário retorna o registro existente. Conflitos de versão retornam `409`. Atualização e evento são gravados juntos; uma falha no lote desfaz ambos. Não há repetição automática de mutações após falha de rede.
 

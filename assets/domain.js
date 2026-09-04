@@ -1,7 +1,8 @@
 export const STAGES = [
   ['recebido', 'Novo pedido'], ['solicitado', 'Na operadora / em análise'],
   ['agendado', 'Autorizado'], ['realizado', 'Realizado'],
-  ['conferencia', 'Pronto para faturamento'], ['faturamento', 'Entregue ao faturamento']
+  ['conferencia', 'Pronto para faturamento'], ['faturamento', 'Entregue ao faturamento'],
+  ['cancelado', 'Cancelado']
 ];
 export const CHECKS = {
   autorizada: 'Guia autorizada', assinada: 'Guia assinada',
@@ -22,6 +23,7 @@ export const PROCESS_CONDITIONS = [
   ['falta_carimbo','Falta carimbo ou assinatura'],
   ['aguardando_laudo','Aguardando relatório ou laudo'],
   ['divergencia_dados','Dados do processo estão divergentes'],
+  ['cancelado','Paciente não realizará este procedimento'],
   ['outro','Outra pendência']
 ];
 export const FIELD_LABELS = {paciente:'Paciente', convenio:'Convênio', medicacao:'Medicação', aplicacao:'Detalhes da aplicação', data:'Data da aplicação', executor:'Médico executor', atendente:'Responsável pelo registro'};
@@ -90,7 +92,7 @@ export function validateCaseFields(input,references={convenios:CONVENIOS,medicac
   structured.aplicacao=`${structured.numeroAplicacao}ª aplicação · ${structured.articulacao} ${structured.lado.toLowerCase()}`;
   return structured;
 }
-export function updateCaseFields(previous,input) {
+export function updateCaseFields(previous,input,references={convenios:CONVENIOS,medicacoes:MEDICACOES,medicos:MEDICOS}) {
   if(!input || typeof input!=='object')throw problem(400,'Confira os dados da guia.');
   const numeroGuia=String(input.numeroGuia ?? previous.numeroGuia ?? '').trim().toUpperCase();
   const observacao=String(input.observacao ?? previous.observacao ?? '').trim();
@@ -98,12 +100,25 @@ export function updateCaseFields(previous,input) {
   const condicaoProcesso=String(input.condicaoProcesso ?? fallback).trim();
   const pendencia=condicaoProcesso!=='regular';
   const dataAplicacao=String(input.dataAplicacao ?? input.data ?? previous.dataAplicacao ?? previous.data ?? '').trim();
+  const dataPedido=String(input.dataPedido ?? previous.dataPedido ?? '').trim();
+  const pedidoRacimed=String(input.pedidoRacimed ?? previous.pedidoRacimed ?? '').trim();
+  const executor=String(input.executor ?? previous.executor ?? '').trim();
+  const medicacao=String(input.medicacao ?? previous.medicacao ?? '').trim();
+  const selectedJoint=String(input.articulacao ?? previous.articulacao ?? '').trim();
+  const articulacao=selectedJoint==='Outra articulação'?String(input.articulacaoOutra || '').trim():selectedJoint;
+  const lado=String(input.lado ?? previous.lado ?? '').trim();
+  const numeroAplicacao=String(input.numeroAplicacao ?? previous.numeroAplicacao ?? '').trim();
   if(numeroGuia.length>60)throw problem(400,'O número da guia está muito longo.');
   if(!PROCESS_CONDITIONS.some(([key])=>key===condicaoProcesso))throw problem(400,'Informe a condição atual do processo.');
   if(condicaoProcesso==='outro' && !observacao)throw problem(400,'Explique a outra pendência no campo de detalhes.');
   if(observacao.length>500)throw problem(400,'Os detalhes devem ter no máximo 500 caracteres.');
   if(dataAplicacao && !validDate(dataAplicacao))throw problem(400,'Informe uma data de realização válida.');
-  return {...previous,numeroGuia,condicaoProcesso,observacao,pendencia,dataAplicacao,data:dataAplicacao};
+  if(!validDate(dataPedido))throw problem(400,'Informe a data do pedido.');
+  if(pedidoRacimed.length>60 || !references.medicos?.includes(executor) || (medicacao && !references.medicacoes?.includes(medicacao)))throw problem(400,'Confira o pedido, o médico e a medicação.');
+  if(!articulacao || articulacao.length>60 || (selectedJoint!=='Outra articulação'&&!ARTICULACOES.includes(articulacao)))throw problem(400,'Confira a articulação.');
+  if(!LADOS.includes(lado) || !['1','2','3'].includes(numeroAplicacao))throw problem(400,'Confira o lado e a aplicação.');
+  const aplicacao=`${numeroAplicacao}ª aplicação · ${articulacao} ${lado.toLowerCase()}`;
+  return {...previous,numeroGuia,condicaoProcesso,observacao,pendencia,dataPedido,dataAplicacao,data:dataAplicacao,pedidoRacimed,executor,medicacao,articulacao,lado,numeroAplicacao,aplicacao};
 }
 export function processLabel(fields) {
   const key=fields.condicaoProcesso || (fields.pendencia?'outro':'regular');
@@ -117,21 +132,30 @@ export function jointLabel(fields) {
 }
 export function emptyChecks() { return Object.fromEntries(Object.keys(CHECKS).map(k=>[k,false])); }
 export function pending(record) { return Object.keys(CHECKS).filter(key=>!record.checks[key]); }
-export function nextStage(stage) { return STAGES[STAGES.findIndex(([id])=>id === stage)+1]?.[0] || null; }
-export function canEdit(record, role) {
-  return record.stage !== 'faturamento' && ['admin','recepcao'].includes(role);
+export function nextStage(stage) {
+  const flow=STAGES.filter(([id])=>id!=='cancelado');
+  const index=flow.findIndex(([id])=>id===stage);
+  return index<0?null:flow[index+1]?.[0] || null;
 }
-export function transition(record, input, role) {
+export function canEdit(record, role) {
+  return !['faturamento','cancelado'].includes(record.stage) && ['admin','recepcao'].includes(role);
+}
+export function transition(record, input, role, references) {
   if (!Object.hasOwn(ROLES,role)) throw problem(403,'Acesso não autorizado.');
   if (!input || !Number.isInteger(input.version) || input.version !== record.version) throw problem(409,'Este atendimento foi atualizado. Reabra os detalhes antes de alterar.');
   const target = input.stage || record.stage;
   const advancing = target !== record.stage;
-  if (record.stage === 'faturamento') throw problem(409,'A guia já foi entregue ao faturamento. O histórico está disponível para consulta.');
-  if (advancing && nextStage(record.stage) !== target) throw problem(400,'Avance uma etapa de cada vez.');
+  if (['faturamento','cancelado'].includes(record.stage)) throw problem(409,'Este processo já foi encerrado. O histórico está disponível para consulta.');
+  if (advancing && target!=='cancelado' && nextStage(record.stage) !== target) throw problem(400,'Avance uma etapa de cada vez.');
   if (!canEdit(record,role)) throw problem(403,'Esta ação é do setor de autorizações.');
   const checks = input.checks || record.checks;
-  const fields = input.fields ? updateCaseFields(record.fields,input.fields) : {...record.fields};
+  const fields = input.fields ? updateCaseFields(record.fields,input.fields,references) : {...record.fields};
   if (!checks || Object.keys(checks).length !== Object.keys(CHECKS).length || Object.keys(CHECKS).some(key=>typeof checks[key] !== 'boolean')) throw problem(400,'Confira a lista de documentos.');
+  if(target==='cancelado') {
+    if(!fields.observacao)throw problem(400,'Informe o motivo do cancelamento deste procedimento.');
+    fields.condicaoProcesso='cancelado';fields.pendencia=false;
+    return {...record,fields,checks:{...checks},stage:target,version:record.version+1};
+  }
   if (advancing && fields.pendencia) throw problem(400,'Resolva a pendência antes de avançar esta guia.');
   if (['agendado','realizado','conferencia','faturamento'].includes(target) && !checks.autorizada) throw problem(400,'Confirme a autorização da guia antes de avançar.');
   if (['agendado','realizado','conferencia','faturamento'].includes(target) && !fields.numeroGuia) throw problem(400,'Informe o número da guia autorizada antes de avançar.');

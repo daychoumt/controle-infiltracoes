@@ -312,6 +312,8 @@ main {
   color:var(--ink);
   border-color:#cfd9dc;
 }
+.button.danger {background:#a63a31;border-color:#a63a31;color:#fff;}
+.button.danger:hover {background:#8f2e27;border-color:#8f2e27;}
 .button.secondary:hover {
   background:#edf2f3;
 }
@@ -734,6 +736,8 @@ footer a {
 .filter.status-realizado {border-top-color:#4d6d8c;}
 .filter.status-conferencia {border-top-color:#765395;}
 .filter.status-faturamento {border-top-color:#25704f;}
+.filter.status-cancelado {border-top-color:#7b858a;background:#f7f8f8;}
+.danger-outline {color:#8f2e27!important;border-color:#d8aaa5!important;background:#fff8f7!important;}
 .toolbar {
   display:flex;
   align-items:end;
@@ -850,6 +854,10 @@ td .text-button {
   background:#f1eafa;
   color:#684487;
 }
+.pill.cancelado {
+  background:#f1f2f3;
+  color:#5c656a;
+}
 .stage-row {
   box-shadow:inset 4px 0 #667b85;
 }
@@ -858,6 +866,7 @@ td .text-button {
 .stage-row.realizado {box-shadow:inset 4px 0 #4d6d8c;}
 .stage-row.conferencia {box-shadow:inset 4px 0 #765395;}
 .stage-row.faturamento {box-shadow:inset 4px 0 #25704f;}
+.stage-row.cancelado {box-shadow:inset 4px 0 #7b858a;background:#fafbfb;}
 .stage-row.has-pending {box-shadow:inset 5px 0 #b03636;background:#fffafa;}
 .stage-row.is-stale:not(.has-pending) {box-shadow:inset 5px 0 #d4552d;background:#fffdf9;}
 .pending-note {
@@ -1104,6 +1113,9 @@ dialog::backdrop {
   padding:18px 20px;
   background:#f7f9f9;
 }
+.patient-overview .text-button {margin-left:auto;}
+.patient-overview td:last-child .text-button {display:block;margin:7px 0 0;}
+#profile-form,#process-form,#cancel-form {display:grid;gap:18px;}
 .patient-overview h3 {
   font-size:15px;
 }

@@ -32,6 +32,13 @@ export async function handle(request,env,dependencies={}) {
       if(!/^[A-Z0-9./-]{2,30}$/.test(prontuario))throw problem(400,'Informe um prontuário válido.');
       return reply(200,{patient:await repository.patient(prontuario)});
     }
+    if(url.pathname==='/patient' && request.method==='PATCH') {
+      if(!['admin','recepcao'].includes(user.role))throw problem(403,'A correção de pacientes é feita pelo setor de autorizações.');
+      const input=await readJson(request),prontuario=String(input.prontuario || '').trim().toUpperCase();
+      const paciente=String(input.paciente || '').trim(),convenio=String(input.convenio || '').trim();
+      if(!/^[A-Z0-9./-]{2,30}$/.test(prontuario) || paciente.length<2 || paciente.length>120 || !parseReferences(env.REFERENCE_DATA).convenios.includes(convenio))throw problem(400,'Confira o prontuário, o nome e o convênio.');
+      return reply(200,{patient:await repository.updatePatient(prontuario,{paciente,convenio},user)});
+    }
     if(url.pathname==='/cases' && request.method==='GET') {
       const cursor=url.searchParams.get('cursor') || '';
       if(cursor) {
@@ -54,7 +61,7 @@ export async function handle(request,env,dependencies={}) {
     }
     if(match && request.method==='PATCH') {
       const input=await readJson(request),previous=await repository.get(match[1]);
-      const updated=transition(previous,input,user.role);
+      const updated=transition(previous,input,user.role,parseReferences(env.REFERENCE_DATA));
       updated.updatedAt=new Date().toISOString();
       return reply(200,await repository.update(previous,updated,user));
     }

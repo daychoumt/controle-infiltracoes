@@ -17,6 +17,7 @@ function fixture() {
   db.exec(readFileSync(new URL('../migrations/0001_cases.sql',import.meta.url),'utf8'));
   db.exec(readFileSync(new URL('../migrations/0002_sector_workflow.sql',import.meta.url),'utf8'));
   db.exec(readFileSync(new URL('../migrations/0003_patients.sql',import.meta.url),'utf8'));
+  db.exec(readFileSync(new URL('../migrations/0004_patient_audit.sql',import.meta.url),'utf8'));
   const binding={
     prepare(sql){return {bind(...args){return {sql,args,async first(){return db.prepare(sql).get(...args)||null;},async all(){return {results:db.prepare(sql).all(...args)};}};}}},
     async batch(statements){db.exec('BEGIN');try{const results=statements.map(({sql,args})=>({meta:db.prepare(sql).run(...args)}));db.exec('COMMIT');return results;}catch(error){db.exec('ROLLBACK');throw error;}}
@@ -87,7 +88,11 @@ test('prontuário mantém um perfil único mesmo se o navegador enviar outro nom
   const response=await handle(request('/cases','POST',{id:secondId,fields:{...fields,paciente:'Nome divergente',articulacao:'Ombro',lado:'Esquerdo'}}),env,deps);
   assert.equal(response.status,201);
   const saved=await response.json();assert.equal(saved.fields.paciente,'Paciente fictício');assert.equal(saved.fields.convenio,'Particular');
-  assert.equal((await repository.list()).items.length,2);db.close();
+  assert.equal((await repository.list()).items.length,2);
+  const corrected=await handle(request('/patient','PATCH',{prontuario:'10021',paciente:'Paciente corrigido',convenio:'Particular'}),env,deps);
+  assert.equal(corrected.status,200);assert.equal((await corrected.json()).patient.paciente,'Paciente corrigido');
+  assert.ok((await repository.list()).items.every(item=>item.fields.paciente==='Paciente corrigido'));
+  assert.equal(db.prepare('SELECT count(*) AS total FROM patient_events WHERE prontuario = ?').get('10021').total,1);db.close();
 });
 test('atualização concorrente não sobrescreve nem acrescenta evento falso',async()=>{
   const {db,repository}=fixture(),at='2026-01-01T00:00:00.000Z';

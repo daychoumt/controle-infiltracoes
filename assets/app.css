@@ -644,10 +644,23 @@ footer a {
 }
 .stage-overview {
   display:grid;
-  grid-template-columns:repeat(8,minmax(125px,1fr));
-  gap:10px;
-  overflow-x:auto;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:14px;
   padding:3px 3px 8px;
+}
+.filter-group {
+  padding:16px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:#f8faf9;
+}
+.filter-group-heading {margin-bottom:12px;}
+.filter-group-heading h3 {font-size:14px;margin:0 0 3px;}
+.filter-group-heading p {font-size:11px;color:var(--muted);margin:0;}
+.filter-grid {
+  display:grid;
+  grid-template-columns:repeat(3,minmax(112px,1fr));
+  gap:8px;
 }
 .metric {
   padding:22px;
@@ -715,6 +728,7 @@ footer a {
 }
 .filter.status-recebido {border-top-color:#667b85;}
 .filter.status-pendencia {border-top-color:#b42318;background:#fff7f5;}
+.filter.status-sem_atualizacao {border-top-color:#d4552d;background:#fff8f1;}
 .filter.status-solicitado {border-top-color:#a66a16;}
 .filter.status-agendado {border-top-color:#32669b;}
 .filter.status-realizado {border-top-color:#4d6d8c;}
@@ -845,10 +859,17 @@ td .text-button {
 .stage-row.conferencia {box-shadow:inset 4px 0 #765395;}
 .stage-row.faturamento {box-shadow:inset 4px 0 #25704f;}
 .stage-row.has-pending {box-shadow:inset 5px 0 #b03636;background:#fffafa;}
+.stage-row.is-stale:not(.has-pending) {box-shadow:inset 5px 0 #d4552d;background:#fffdf9;}
 .pending-note {
   color:#a12727;
   font-weight:650;
   font-size:11px;
+}
+.stale-note {
+  display:block;
+  color:#a33d20;
+  font-weight:700;
+  margin-top:7px;
 }
 .check-progress {
   display:flex;
@@ -1190,6 +1211,22 @@ dialog::backdrop {
 .large-dialog .form-section {
   padding-inline:0;
 }
+.field-feedback {
+  min-height:20px;
+  margin:10px 0 0;
+  color:var(--green);
+  font-size:12px;
+  font-weight:650;
+}
+.automatic-author {
+  margin:20px 0 0;
+  padding:13px 15px;
+  border:1px solid #cddfd8;
+  border-radius:9px;
+  background:#f4faf7;
+  color:var(--muted);
+  font-size:12px;
+}
 .application-choice {
   border:0;
   padding:0;
@@ -1327,7 +1364,7 @@ dialog::backdrop {
   .demo-link {
     grid-column:1/-1;
   }
-  .stage-overview {grid-template-columns:repeat(8,135px);}
+  .stage-overview {grid-template-columns:repeat(3,390px);overflow-x:auto;}
   .page-heading {
     flex-wrap:wrap;
   }

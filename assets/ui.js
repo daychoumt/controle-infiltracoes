@@ -1,4 +1,4 @@
-import {CONVENIOS, MEDICACOES, MEDICOS, ARTICULACOES, LADOS, PROCESS_CONDITIONS, FIELD_LABELS, processLabel} from './domain.js?v=5';
+import {CONVENIOS, MEDICACOES, MEDICOS, ARTICULACOES, LADOS, PROCESS_CONDITIONS, FIELD_LABELS, processLabel} from './domain.js?v=6';
 export const $ = (selector,root=document) => root.querySelector(selector);
 export function node(tag,text,className) { const el=document.createElement(tag); if(text != null) el.textContent=text; if(className) el.className=className; return el; }
 export function fillOptions(root=document,references=null,reset=false) {
@@ -18,7 +18,7 @@ export function displayDate(value) { return new Intl.DateTimeFormat('pt-BR',{day
 export function summary(container,fields,labels=FIELD_LABELS) {
   container.replaceChildren();
   for(const [key,label] of Object.entries(labels)) {
-    const value=key==='numeroAplicacao' && fields[key] ? `${fields[key]}ª de 3` : key==='data' && fields[key] ? displayDate(fields[key]) : key==='condicaoProcesso' ? processLabel(fields) : fields[key];
+    const value=key==='numeroAplicacao' && fields[key] ? `${fields[key]}ª de 3` : key.startsWith('data') && fields[key] ? displayDate(fields[key]) : key==='condicaoProcesso' ? processLabel(fields) : fields[key];
     container.append(node('dt',label),node('dd',value || 'Não informado'));
   }
 }

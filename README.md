@@ -26,22 +26,23 @@ A demonstração é interativa, mas não grava dados em servidores ou no armazen
 | Área | Comportamento |
 | --- | --- |
 | Entrada única | O endereço principal abre o controle; o formulário antigo que disparava e-mail não é mais utilizado pelo site |
-| Cadastro operacional | Prontuário Racimed, paciente, convênio, pedido, médico, articulação, lado e sequência da aplicação |
+| Perfil único | O prontuário identifica um único paciente e reaproveita nome e convênio nos próximos processos |
+| Cadastro operacional | Prontuário Racimed, paciente, convênio, pedido, médico, articulação, lado, sequência e data do pedido |
 | Regra da guia | Cada combinação de articulação e lado é registrada como uma guia independente |
-| Acompanhamento | Fila visual por situação, pesquisa por paciente, prontuário, número da guia, convênio e articulação |
+| Acompanhamento | Autorizações e pós-procedimento ficam em blocos distintos; pesquisa por paciente, prontuário, guia, convênio e articulação |
 | Conferência | Guia autorizada, guia assinada, execução e documentação conferidas |
 | Fluxo enxuto | Novo pedido → na operadora/em análise → autorizado → realizado → pronto → entregue ao faturamento |
 | Pendências | Correções aparecem como alerta separado e impedem avanço até serem resolvidas |
 | Condição do processo | Pedido para corrigir, ressonância aguardando envio, falta de carimbo/assinatura, laudo aguardando, divergência ou outra pendência |
 | Responsabilidade | O setor de autorizações mantém o controle; recepção e faturamento recebem as relações impressas |
-| Histórico | Aplicações agrupadas pelo prontuário, além de ações, datas, perfil e versão de cada atendimento |
+| Histórico | Todas as articulações e aplicações aparecem no perfil do paciente, mas cada guia mantém processo e situação próprios |
 | Fechamento mensal | Movimento completo, pendências ou entrega; folhas A4 separadas por convênio com campos de assinatura |
-| Relação impressa | Paciente, prontuário, número da guia, médico, articulação, lado, 1ª/2ª/3ª aplicação, data, situação, condição, observação e totais |
+| Relação impressa | Paciente, prontuário, guia, médico, articulação, lado, aplicação, datas do pedido/realização/faturamento, situação e pendências |
 | Backend | API em Cloudflare Workers, autenticação Firebase e banco SQL D1 |
 | Concorrência | Versão esperada por atualização; registro e evento gravados na mesma transação |
 | Acesso | API nega usuários fora da lista de equipe, mesmo que tenham login válido |
 | Cadastros auxiliares | Listas reais de médicos, convênios e medicamentos ficam no backend; a demonstração usa exemplos fictícios |
-| Qualidade | 31 testes automatizados e verificações de sintaxe e referências locais no GitHub Actions |
+| Qualidade | 33 testes automatizados e verificações de sintaxe e referências locais no GitHub Actions |
 
 ## O que está publicado e o que depende de configuração
 
@@ -59,7 +60,7 @@ O painel não envia e-mails. O banco protegido é a fonte principal e a impress�
 | Regras compartilhadas | Validação, transições, permissões por etapa e conferência de documentos |
 | API | Cloudflare Worker com autenticação em cada requisição e respostas sem cache |
 | Identidade | Firebase Authentication; contas e perfis liberados explicitamente no servidor |
-| Persistência da equipe | D1, tabelas `cases` e `events`, consultas parametrizadas e transações |
+| Persistência da equipe | D1, perfis em `patients`, processos em `cases`, auditoria em `events` e transações |
 | Cópia de segurança | Integração futura com a planilha oficial da clínica, sem notificações e sem trabalho manual |
 | Hospedagem | GitHub Pages com domínio próprio |
 
@@ -87,7 +88,7 @@ docs/        Configuração do backend
 
 ## Limites atuais
 
-Sem anexos, importação automática do Racimed ou decisões clínicas automatizadas. Como não existe integração disponível com o Racimed, o primeiro cadastro ainda é manual; número da guia, data da aplicação, condição, observação e conferência podem ser atualizados depois. Guias entregues permanecem disponíveis para histórico e impressão.
+Sem anexos, importação automática do Racimed ou decisões clínicas automatizadas. Como não existe integração disponível com o Racimed, o primeiro perfil ainda é manual; nos próximos processos, nome e convênio são recuperados pelo prontuário. Número da guia, data da realização, condição, observação e conferência podem ser atualizados depois. A data de envio ao faturamento é registrada automaticamente na etapa final.
 
 Nenhum dado real foi usado nos testes. A ativação para a clínica exige validar o fluxo e as permissões em um ambiente de homologação.
 

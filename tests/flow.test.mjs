@@ -5,7 +5,7 @@ import {DemoStore} from '../assets/store.js';
 const fields={paciente:'Paciente de teste',convenio:'Particular',medicacao:'',aplicacao:'Procedimento de teste',numeroGuia:'GUIA-1',pendencia:false,observacao:'',data:'2026-01-01',executor:'Dr. Exemplo A',atendente:'Autorizações'};
 const all={autorizada:true,assinada:true,execucao:true,documentos:true};
 const record=(stage='recebido',checks=emptyChecks())=>({fields,stage,checks,version:1});
-const workflowFields={prontuario:'ab-102',paciente:'Paciente de teste',convenio:'Particular',medicacao:'',articulacao:'Joelho',lado:'Direito',numeroAplicacao:'2',pedidoRacimed:'RC-9',condicaoProcesso:'regular',observacao:'',data:'2026-01-01',executor:'Dr. Exemplo A',atendente:'Autorizações'};
+const workflowFields={prontuario:'ab-102',paciente:'Paciente de teste',convenio:'Particular',medicacao:'',articulacao:'Joelho',lado:'Direito',numeroAplicacao:'2',pedidoRacimed:'RC-9',condicaoProcesso:'regular',observacao:'',dataPedido:'2025-12-20',dataAplicacao:'2026-01-01',executor:'Dr. Exemplo A',atendente:'Autorizações'};
 test('normaliza os campos e rejeita datas inexistentes',()=>{
   assert.equal(validateFields({...fields,paciente:'  Ana  '}).paciente,'Ana');
   assert.equal(validDate('2026-02-30'),false);assert.equal(validDate('2028-02-29'),true);
@@ -59,7 +59,7 @@ test('fluxo completo exige poucos registros do setor e preserva o original',()=>
   next=transition(next,{version:3,stage:'realizado'},'recepcao');
   next=transition(next,{version:4,stage:'conferencia',checks:all},'recepcao');
   next=transition(next,{version:5,stage:'faturamento'},'recepcao');
-  assert.equal(next.version,6);assert.equal(next.stage,'faturamento');assert.equal(original.version,1);assert.equal(original.checks.autorizada,false);
+  assert.equal(next.version,6);assert.equal(next.stage,'faturamento');assert.equal(validDate(next.fields.dataFaturamento),true);assert.equal(original.version,1);assert.equal(original.checks.autorizada,false);
 });
 test('demonstração registra histórico e reinicia sem persistir dados',async()=>{
   const demo=new DemoStore(),item=(await demo.list()).items.find(r=>r.stage==='conferencia');
@@ -72,4 +72,10 @@ test('demonstração cadastra uma guia e aceita articulação personalizada',asy
   const created=await demo.create({id:crypto.randomUUID(),fields:{...workflowFields,articulacao:'Outra articulação',articulacaoOutra:'Sacroilíaca'}});
   assert.equal(created.fields.articulacao,'Sacroilíaca');assert.equal(created.stage,'recebido');
   assert.equal((await demo.list()).items.length,before+1);
+});
+test('cadastro aparece imediatamente na fila e reaproveita o perfil do paciente',async()=>{
+  const demo=new DemoStore(),id=crypto.randomUUID();
+  await demo.create({id,fields:workflowFields});
+  const list=await demo.list(),saved=list.items.find(item=>item.id===id),profile=await demo.patient('AB-102');
+  assert.equal(saved.fields.paciente,'Paciente de teste');assert.equal(profile.patient.convenio,'Particular');
 });

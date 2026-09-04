@@ -1,4 +1,4 @@
-import {problem,validateCaseFields,emptyChecks,transition} from '../assets/domain.js';
+import {problem,validateCaseFields,emptyChecks,transition,ROLES} from '../assets/domain.js';
 import {authenticate} from './auth.mjs';
 import {Repository} from './repository.mjs';
 import {parseReferences} from './references.mjs';
@@ -19,14 +19,19 @@ export async function handle(request,env,dependencies={}) {
   if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{...headers,'Access-Control-Allow-Methods':'GET, POST, PATCH, OPTIONS','Access-Control-Allow-Headers':'Authorization, Content-Type','Access-Control-Max-Age':'600'}});
   try {
     const url=new URL(request.url),match=/^\/cases\/([\da-f-]+)$/i.exec(url.pathname);
-    if(!['/session','/references','/cases'].includes(url.pathname) && !match)throw problem(404,'Rota não encontrada.');
+    if(!['/session','/references','/patient','/cases'].includes(url.pathname) && !match)throw problem(404,'Rota não encontrada.');
     if(!env.FIREBASE_PROJECT_ID || !env.FIREBASE_WEB_API_KEY || !env.DB)throw problem(503,'O painel da equipe ainda precisa ser configurado.');
     const token=/^Bearer (\S+)$/.exec(request.headers.get('Authorization') || '')?.[1];
     if(!token || token.length>8192)throw problem(401,'Entre com sua conta da equipe.');
     const user=await (dependencies.authenticate || authenticate)(token,env);
     const repository=dependencies.repository || new Repository(env.DB);
-    if(url.pathname==='/session' && request.method==='GET')return reply(200,{role:user.role});
+    if(url.pathname==='/session' && request.method==='GET')return reply(200,{role:user.role,name:user.name || ROLES[user.role]});
     if(url.pathname==='/references' && request.method==='GET')return reply(200,parseReferences(env.REFERENCE_DATA));
+    if(url.pathname==='/patient' && request.method==='GET') {
+      const prontuario=String(url.searchParams.get('prontuario') || '').trim().toUpperCase();
+      if(!/^[A-Z0-9./-]{2,30}$/.test(prontuario))throw problem(400,'Informe um prontuário válido.');
+      return reply(200,{patient:await repository.patient(prontuario)});
+    }
     if(url.pathname==='/cases' && request.method==='GET') {
       const cursor=url.searchParams.get('cursor') || '';
       if(cursor) {
@@ -41,7 +46,10 @@ export async function handle(request,env,dependencies={}) {
       if(!['admin','recepcao'].includes(user.role))throw problem(403,'A abertura de guias é feita pelo setor de autorizações.');
       const input=await readJson(request);
       if(!input || !uuid.test(input.id))throw problem(400,'Protocolo inválido.');
-      const fields=validateCaseFields(input.fields,parseReferences(env.REFERENCE_DATA)),at=new Date().toISOString();
+      let fields=validateCaseFields({...input.fields,atendente:user.name || ROLES[user.role]},parseReferences(env.REFERENCE_DATA));
+      const patient=await repository.patient(fields.prontuario);
+      if(patient)fields={...fields,paciente:patient.paciente,convenio:patient.convenio};
+      const at=new Date().toISOString();
       return reply(201,await repository.create({id:input.id,fields,stage:'recebido',checks:emptyChecks(),version:1,createdAt:at,updatedAt:at},user));
     }
     if(match && request.method==='PATCH') {

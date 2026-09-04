@@ -28,7 +28,8 @@ export const FIELD_LABELS = {paciente:'Paciente', convenio:'Convênio', medicaca
 export const WORKFLOW_FIELD_LABELS = {
   prontuario:'Prontuário', paciente:'Paciente', convenio:'Convênio', executor:'Médico',
   medicacao:'Medicação', articulacao:'Articulação', lado:'Lado', numeroAplicacao:'Aplicação',
-  pedidoRacimed:'Pedido no Racimed', numeroGuia:'Número da guia', data:'Data da aplicação',
+  pedidoRacimed:'Pedido no Racimed', numeroGuia:'Número da guia', dataPedido:'Data do pedido',
+  dataAplicacao:'Data da realização', dataFaturamento:'Data de envio ao faturamento',
   condicaoProcesso:'Condição do processo', observacao:'Detalhes da pendência', atendente:'Responsável'
 };
 export const problem = (status, message) => Object.assign(new Error(message), {status});
@@ -67,7 +68,10 @@ export function validateCaseFields(input,references={convenios:CONVENIOS,medicac
     articulacao, lado:String(input.lado || '').trim(), numeroAplicacao:String(input.numeroAplicacao || '').trim(),
     pedidoRacimed:String(input.pedidoRacimed || '').trim(), numeroGuia:String(input.numeroGuia || '').trim().toUpperCase(),
     condicaoProcesso:String(input.condicaoProcesso || (input.pendencia?'outro':'regular')).trim(),
-    observacao:String(input.observacao || '').trim(), data:String(input.data || '').trim(),
+    observacao:String(input.observacao || '').trim(),
+    dataPedido:String(input.dataPedido || '').trim(),
+    dataAplicacao:String(input.dataAplicacao || input.data || '').trim(),
+    dataFaturamento:'',
     atendente:String(input.atendente || '').trim()
   };
   if(!/^[A-Z0-9./-]{2,30}$/.test(structured.prontuario)) throw problem(400,'Informe o número do prontuário do Racimed.');
@@ -80,7 +84,9 @@ export function validateCaseFields(input,references={convenios:CONVENIOS,medicac
   structured.pendencia=structured.condicaoProcesso!=='regular';
   if(structured.condicaoProcesso==='outro' && !structured.observacao) throw problem(400,'Explique a outra pendência no campo de detalhes.');
   if(structured.pedidoRacimed.length>60 || structured.numeroGuia.length>60 || structured.observacao.length>500 || structured.atendente.length<2 || structured.atendente.length>120) throw problem(400,'Confira os dados da guia e o responsável pelo registro.');
-  if(structured.data && !validDate(structured.data)) throw problem(400,'Informe uma data de aplicação válida.');
+  if(!validDate(structured.dataPedido)) throw problem(400,'Informe a data em que o pedido foi recebido.');
+  if(structured.dataAplicacao && !validDate(structured.dataAplicacao)) throw problem(400,'Informe uma data de realização válida.');
+  structured.data=structured.dataAplicacao;
   structured.aplicacao=`${structured.numeroAplicacao}ª aplicação · ${structured.articulacao} ${structured.lado.toLowerCase()}`;
   return structured;
 }
@@ -91,13 +97,13 @@ export function updateCaseFields(previous,input) {
   const fallback=previous.condicaoProcesso || (previous.pendencia?'outro':'regular');
   const condicaoProcesso=String(input.condicaoProcesso ?? fallback).trim();
   const pendencia=condicaoProcesso!=='regular';
-  const data=String(input.data ?? previous.data ?? '').trim();
+  const dataAplicacao=String(input.dataAplicacao ?? input.data ?? previous.dataAplicacao ?? previous.data ?? '').trim();
   if(numeroGuia.length>60)throw problem(400,'O número da guia está muito longo.');
   if(!PROCESS_CONDITIONS.some(([key])=>key===condicaoProcesso))throw problem(400,'Informe a condição atual do processo.');
   if(condicaoProcesso==='outro' && !observacao)throw problem(400,'Explique a outra pendência no campo de detalhes.');
   if(observacao.length>500)throw problem(400,'Os detalhes devem ter no máximo 500 caracteres.');
-  if(data && !validDate(data))throw problem(400,'Informe uma data de aplicação válida.');
-  return {...previous,numeroGuia,condicaoProcesso,observacao,pendencia,data};
+  if(dataAplicacao && !validDate(dataAplicacao))throw problem(400,'Informe uma data de realização válida.');
+  return {...previous,numeroGuia,condicaoProcesso,observacao,pendencia,dataAplicacao,data:dataAplicacao};
 }
 export function processLabel(fields) {
   const key=fields.condicaoProcesso || (fields.pendencia?'outro':'regular');
@@ -130,8 +136,10 @@ export function transition(record, input, role) {
   if (['agendado','realizado','conferencia','faturamento'].includes(target) && !checks.autorizada) throw problem(400,'Confirme a autorização da guia antes de avançar.');
   if (['agendado','realizado','conferencia','faturamento'].includes(target) && !fields.numeroGuia) throw problem(400,'Informe o número da guia autorizada antes de avançar.');
   const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-  if (advancing && target==='realizado' && (!fields.data || fields.data>today)) throw problem(400,'Informe a data da aplicação antes de marcar como realizada.');
+  const dataAplicacao=fields.dataAplicacao || fields.data || '';
+  if (advancing && target==='realizado' && (!dataAplicacao || dataAplicacao>today)) throw problem(400,'Informe a data da realização antes de marcar como realizada.');
   if (['conferencia','faturamento'].includes(target) && Object.values(checks).some(value=>!value)) throw problem(400,'Conclua os quatro itens de conferência antes de deixar a guia pronta para o faturamento.');
+  if(advancing && target==='faturamento')fields.dataFaturamento=today;
   return {...record,fields,checks:{...checks}, stage:target, version:record.version+1};
 }
 export function eventLabel(previous, updated) {

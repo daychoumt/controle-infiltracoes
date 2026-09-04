@@ -6,9 +6,9 @@ import {handle} from '../worker/index.mjs';
 import {authenticate} from '../worker/auth.mjs';
 import {Repository,SQL} from '../worker/repository.mjs';
 import {emptyChecks} from '../assets/domain.js';
-const fields={prontuario:'10021',paciente:'Paciente fictício',convenio:'Particular',medicacao:'',articulacao:'Joelho',lado:'Direito',numeroAplicacao:'1',pedidoRacimed:'RC-100',condicaoProcesso:'regular',observacao:'',aplicacao:'1ª aplicação · Joelho direito',data:'2026-01-01',executor:'Dr. Exemplo A',atendente:'Equipe'};
+const fields={prontuario:'10021',paciente:'Paciente fictício',convenio:'Particular',medicacao:'',articulacao:'Joelho',lado:'Direito',numeroAplicacao:'1',pedidoRacimed:'RC-100',condicaoProcesso:'regular',observacao:'',aplicacao:'1ª aplicação · Joelho direito',dataPedido:'2025-12-20',dataAplicacao:'2026-01-01',data:'2026-01-01',executor:'Dr. Exemplo A',atendente:'Nome enviado pelo navegador'};
 const env={FIREBASE_PROJECT_ID:'clinic-test',FIREBASE_WEB_API_KEY:'public-test-config',DB:{},ALLOWED_ORIGINS:'https://clinic.example',STAFF_ROLES:JSON.stringify({'staff-1':'recepcao'}),REFERENCE_DATA:JSON.stringify({convenios:['Particular'],medicacoes:['Medicação Exemplo A'],medicos:['Dr. Exemplo A']})};
-const user={uid:'staff-1',role:'recepcao'};
+const user={uid:'staff-1',role:'recepcao',name:'Maria Autorizações'};
 const id='10000000-0000-4000-8000-000000000001';
 const all={autorizada:true,assinada:true,execucao:true,documentos:true};
 function request(path,method='GET',body,extra={}) {return new Request('https://worker.example'+path,{method,headers:{Origin:'https://clinic.example',Authorization:'Bearer test','Content-Type':'application/json',...extra},body:body===undefined?undefined:JSON.stringify(body)});}
@@ -16,6 +16,7 @@ function fixture() {
   const db=new DatabaseSync(':memory:');
   db.exec(readFileSync(new URL('../migrations/0001_cases.sql',import.meta.url),'utf8'));
   db.exec(readFileSync(new URL('../migrations/0002_sector_workflow.sql',import.meta.url),'utf8'));
+  db.exec(readFileSync(new URL('../migrations/0003_patients.sql',import.meta.url),'utf8'));
   const binding={
     prepare(sql){return {bind(...args){return {sql,args,async first(){return db.prepare(sql).get(...args)||null;},async all(){return {results:db.prepare(sql).all(...args)};}};}}},
     async batch(statements){db.exec('BEGIN');try{const results=statements.map(({sql,args})=>({meta:db.prepare(sql).run(...args)}));db.exec('COMMIT');return results;}catch(error){db.exec('ROLLBACK');throw error;}}
@@ -42,7 +43,7 @@ function token(overrides={}){const data={aud:'clinic-test',iss:'https://secureto
 const lookup=(account={localId:'staff-1'})=>async()=>Response.json({users:[account]});
 test('token precisa ser validado pelo Firebase, não apenas decodificado',async()=>{
   await assert.rejects(authenticate(token(),env,async()=>Response.json({}, {status:400})),{status:401});
-  assert.deepEqual(await authenticate(token(),env,lookup()),user);
+  assert.deepEqual(await authenticate(token(),env,lookup()),{uid:'staff-1',role:'recepcao',name:'Setor de Autorizações'});
 });
 test('tokens de outro projeto ou expirados são recusados antes da consulta',async()=>{
   let calls=0;const fetcher=()=>{calls++;};
@@ -63,12 +64,13 @@ test('limite considera bytes reais, mesmo sem Content-Length',async()=>{
 test('API grava, consulta, confere, encaminha e recebe usando SQL real',async()=>{
   const {db,repository}=fixture(),deps={repository,authenticate:async()=>user};
   let response=await handle(request('/cases','POST',{id,fields}),env,deps);assert.equal(response.status,201);
-  let record=await response.json();assert.equal(record.events.length,1);
+  let record=await response.json();assert.equal(record.events.length,1);assert.equal(record.fields.atendente,'Maria Autorizações');
+  const patient=await (await handle(request('/patient?prontuario=10021'),env,deps)).json();assert.deepEqual(patient.patient,{prontuario:'10021',paciente:'Paciente fictício',convenio:'Particular'});
   for(const [version,stage,checks] of [[1,'solicitado',emptyChecks()],[2,'agendado',{...emptyChecks(),autorizada:true}],[3,'realizado',{...emptyChecks(),autorizada:true}],[4,'conferencia',all],[5,'faturamento',all]]) {
     response=await handle(request('/cases/'+id,'PATCH',{version,stage,checks,fields:{numeroGuia:'GUIA-100',observacao:'',condicaoProcesso:'regular'}}),env,deps);
     assert.equal(response.status,200);record=await response.json();
   }
-  assert.equal(record.version,6);assert.equal(record.events.length,6);assert.equal(record.stage,'faturamento');assert.equal(record.fields.numeroGuia,'GUIA-100');
+  assert.equal(record.version,6);assert.equal(record.events.length,6);assert.equal(record.stage,'faturamento');assert.equal(record.fields.numeroGuia,'GUIA-100');assert.match(record.fields.dataFaturamento,/^\d{4}-\d{2}-\d{2}$/);
   const list=await (await handle(request('/cases'),env,deps)).json();assert.equal(list.items.length,1);assert.equal(list.items[0].fields.paciente,fields.paciente);db.close();
 });
 test('repetir cadastro com mesmo protocolo não duplica após falha de rede',async()=>{
@@ -76,7 +78,16 @@ test('repetir cadastro com mesmo protocolo não duplica após falha de rede',asy
   await handle(request('/cases','POST',{id,fields}),env,deps);
   assert.equal((await handle(request('/cases','POST',{id,fields}),env,deps)).status,201);
   assert.equal((await repository.list()).items.length,1);assert.equal((await repository.get(id)).events.length,1);
-  assert.equal((await handle(request('/cases','POST',{id,fields:{...fields,paciente:'Outro paciente'}}),env,deps)).status,409);db.close();
+  assert.equal((await handle(request('/cases','POST',{id,fields:{...fields,articulacao:'Ombro',aplicacao:'1ª aplicação · Ombro direito'}}),env,deps)).status,409);db.close();
+});
+test('prontuário mantém um perfil único mesmo se o navegador enviar outro nome',async()=>{
+  const {db,repository}=fixture(),deps={repository,authenticate:async()=>user};
+  await handle(request('/cases','POST',{id,fields}),env,deps);
+  const secondId='10000000-0000-4000-8000-000000000002';
+  const response=await handle(request('/cases','POST',{id:secondId,fields:{...fields,paciente:'Nome divergente',articulacao:'Ombro',lado:'Esquerdo'}}),env,deps);
+  assert.equal(response.status,201);
+  const saved=await response.json();assert.equal(saved.fields.paciente,'Paciente fictício');assert.equal(saved.fields.convenio,'Particular');
+  assert.equal((await repository.list()).items.length,2);db.close();
 });
 test('atualização concorrente não sobrescreve nem acrescenta evento falso',async()=>{
   const {db,repository}=fixture(),at='2026-01-01T00:00:00.000Z';

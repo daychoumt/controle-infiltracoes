@@ -1,6 +1,6 @@
 # Ativação do painel da equipe
 
-O backend deste projeto é independente do Finance AI. O site público já permite explorar uma demonstração, mas não existe banco de pacientes conectado por padrão. A publicação do frontend não cria banco nem libera usuários.
+O backend deste projeto é independente do Finance AI. O site público permite explorar uma demonstração, mas a base real de pacientes só existe depois da criação do D1. A publicação do frontend não cria banco nem libera usuários.
 
 ## 1. Identidade da clínica
 
@@ -85,11 +85,12 @@ Com registros fictícios e uma conta do setor:
 
 1. Confirme que uma conta sem UID liberado recebe acesso negado.
 2. Abra uma guia, marque uma pendência e confirme que ela não avança até a correção.
-3. Registre o envio à operadora. Para autorizar, informe o número da guia e confirme a autorização.
-4. Marque uma aplicação passada como realizada. Tente deixá-la pronta com documentos pendentes; o servidor deve impedir.
-5. Conclua a conferência, registre a entrega ao faturamento e imprima a relação mensal por convênio.
-6. Abra o mesmo registro em duas sessões. Após uma salvar, a outra deve receber conflito e reabrir os detalhes.
-7. Saia do setor e verifique que os dados reais não permanecem na lista ou nos diálogos.
+3. Cadastre outra articulação com o mesmo prontuário e confirme que nome e convênio são recuperados do perfil único.
+4. Registre o envio à operadora. Para autorizar, informe o número da guia e confirme a autorização.
+5. Marque uma aplicação passada como realizada. Tente deixá-la pronta com documentos pendentes; o servidor deve impedir.
+6. Conclua a conferência e registre a entrega; confirme as três datas (pedido, realização e faturamento) na guia e na impressão.
+7. Abra o mesmo registro em duas sessões. Após uma salvar, a outra deve receber conflito e reabrir os detalhes.
+8. Saia do setor e verifique que os dados reais não permanecem na lista ou nos diálogos.
 
 O schema e os testes não criam pacientes no banco remoto. Defina também quem administra acessos, backups e correções cadastrais. A versão atual não permite excluir registros nem corrigir os sete dados cadastrais pela interface; essa limitação deve ser considerada antes de utilizá-la na rotina.
 
@@ -101,13 +102,16 @@ Todas as rotas de dados exigem `Authorization: Bearer <ID_TOKEN>` e usuário lib
 | --- | --- |
 | `GET /session` | Perfil autorizado no servidor |
 | `GET /references` | Listas de convênios, medicamentos e médicos após autenticação |
+| `GET /patient?prontuario=...` | Perfil mínimo do paciente para reaproveitar nome e convênio no cadastro |
 | `GET /cases` | Até 100 atendimentos, mais recentes primeiro, e cursor da próxima página |
 | `GET /cases?cursor=...` | Página seguinte; use o cursor retornado, sem montar manualmente |
 | `GET /cases/:id` | Dados, etapa, versão, conferência e histórico |
 | `POST /cases` | Cadastra uma guia; recebe UUID v4 em `id` e os campos operacionais em `fields` |
 | `PATCH /cases/:id` | Recebe `version`, `stage`, `fields` editáveis e `checks`; aplica regras e registra evento |
 
-`checks` contém quatro booleanos: `autorizada`, `assinada`, `execucao`, `documentos`. As etapas são `recebido`, `solicitado`, `agendado`, `realizado`, `conferencia` e `faturamento`. Na interface elas aparecem com nomes orientados à rotina do setor.
+`checks` contém quatro booleanos: `autorizada`, `assinada`, `execucao`, `documentos`. As etapas são `recebido`, `solicitado`, `agendado`, `realizado`, `conferencia` e `faturamento`. Na interface elas aparecem separadas entre autorizações e pós-procedimento. Cada processo guarda `dataPedido`, `dataAplicacao` e `dataFaturamento`; a última é preenchida automaticamente na entrega final.
+
+O prontuário é a chave única da tabela `patients`. Joelho direito, joelho esquerdo e ombro direito do mesmo paciente continuam sendo três processos independentes na tabela `cases`, com guias, aplicações e situações próprias.
 
 Reenviar um cadastro com o mesmo UUID, mesmos campos e mesmo usuário retorna o registro existente. Conflitos de versão retornam `409`. Atualização e evento são gravados juntos; uma falha no lote desfaz ambos. Não há repetição automática de mutações após falha de rede.
 

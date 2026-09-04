@@ -17,5 +17,8 @@ export async function authenticate(token, env, request=fetch) {
   try{roles=JSON.parse(env.STAFF_ROLES || '{}');}catch{throw problem(503,'A configuração de acesso da equipe precisa ser revisada.');}
   const role=Object.hasOwn(roles, user.localId)?roles[user.localId]:null;
   if(!Object.hasOwn(ROLES,role))throw problem(403,'Sua conta não está autorizada a acessar os atendimentos.');
-  return {uid:user.localId,role};
+  const displayName=String(user.displayName || '').trim();
+  const emailName=String(user.email || '').split('@')[0].replace(/[._-]+/g,' ').trim();
+  const name=(displayName || emailName || ROLES[role]).slice(0,120);
+  return {uid:user.localId,role,name};
 }

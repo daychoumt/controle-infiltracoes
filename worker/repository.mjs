@@ -3,9 +3,11 @@ import {problem,eventLabel} from '../assets/domain.js';
 // against two staff members overwriting each other's work.
 export const SQL={
   get:'SELECT * FROM cases WHERE id = ?',
+  patient:'SELECT prontuario, paciente, convenio FROM patients WHERE prontuario = ?',
   list:'SELECT * FROM cases WHERE (? = 0 OR created_at < ? OR (created_at = ? AND id < ?)) ORDER BY created_at DESC, id DESC LIMIT 101',
   events:'SELECT at, role AS actor, actor_uid AS actorUid, action FROM events WHERE case_id = ? ORDER BY version ASC',
   create:'INSERT INTO cases (id, payload, stage, stage_v2, checks, version, created_at, updated_at, created_by) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)',
+  createPatient:'INSERT OR IGNORE INTO patients (prontuario, paciente, convenio, created_at, updated_at, created_by) VALUES (?, ?, ?, ?, ?, ?)',
   createEvent:'INSERT INTO events (case_id, version, at, actor_uid, role, action) VALUES (?, 1, ?, ?, ?, ?)',
   updateEvent:'INSERT INTO events (case_id, version, at, actor_uid, role, action) SELECT id, version + 1, ?, ?, ?, ? FROM cases WHERE id = ? AND version = ?',
   update:'UPDATE cases SET payload = ?, stage = ?, stage_v2 = ?, checks = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?'
@@ -27,6 +29,10 @@ export class Repository {
     const {results}=await this.stmt('events',id).all();
     return {...decode(row),events:results};
   }
+  async patient(prontuario) {
+    const row=await this.stmt('patient',prontuario).first();
+    return row?{prontuario:row.prontuario,paciente:row.paciente,convenio:row.convenio}:null;
+  }
   async create(record,user) {
     const existing=await this.stmt('get',record.id).first();
     if(existing) {
@@ -34,6 +40,7 @@ export class Repository {
       return this.get(record.id);
     }
     await this.db.batch([
+      this.stmt('createPatient',record.fields.prontuario,record.fields.paciente,record.fields.convenio,record.createdAt,record.updatedAt,user.uid),
       this.stmt('create',record.id,JSON.stringify(record.fields),legacyStage(record.stage),record.stage,JSON.stringify(record.checks),record.createdAt,record.updatedAt,user.uid),
       this.stmt('createEvent',record.id,record.createdAt,user.uid,user.role,eventLabel(null,record))
     ]);

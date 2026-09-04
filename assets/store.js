@@ -1,4 +1,4 @@
-import {validateCaseFields,emptyChecks,transition,eventLabel,problem,localDate} from './domain.js?v=5';
+import {validateCaseFields,emptyChecks,transition,eventLabel,problem,localDate} from './domain.js?v=6';
 export class DemoStore {
   constructor() {
     this.role='recepcao'; this.offset=0;
@@ -17,19 +17,28 @@ export class DemoStore {
     ];
     this.records=entries.map(([prontuario,paciente,convenio,executor,articulacao,lado,numeroAplicacao,stage,days,checks],i)=>{
       const date=new Date();date.setDate(date.getDate()+days);
-      const at=new Date(Date.now()-(i+1)*3600000).toISOString();
+      const updateDays=[0,4,0,0,7,0,3,0,0,0,0][i];
+      const at=new Date(Date.now()-updateDays*86400000-(i+1)*3600000).toISOString();
       const numeroGuia=['agendado','realizado','conferencia','faturamento'].includes(stage)?`GUIA-${String(80500+i).padStart(6,'0')}`:'';
       const pendencia=i===6,condicaoProcesso=pendencia?'pedido_correcao':'regular',observacao=pendencia?'Pedido sem carimbo do médico. Aguardando correção.':'';
-      return {id:`demo-${String(i+1).padStart(3,'0')}`,fields:{prontuario,paciente,convenio,medicacao:'Medicação Exemplo A',articulacao,lado,numeroAplicacao,pedidoRacimed:`RC-${202600+i}`,numeroGuia,pendencia,condicaoProcesso,observacao,aplicacao:`${numeroAplicacao}ª aplicação · ${articulacao} ${lado.toLowerCase()}`,data:localDate(date),executor,atendente:'Equipe de demonstração'},
+      const requestDate=new Date();requestDate.setDate(requestDate.getDate()-12-i);
+      const dataAplicacao=localDate(date);
+      const billing=new Date(date);billing.setDate(billing.getDate()+1);
+      const dataFaturamento=stage==='faturamento'?localDate(billing):'';
+      return {id:`demo-${String(i+1).padStart(3,'0')}`,fields:{prontuario,paciente,convenio,medicacao:'Medicação Exemplo A',articulacao,lado,numeroAplicacao,pedidoRacimed:`RC-${202600+i}`,numeroGuia,pendencia,condicaoProcesso,observacao,aplicacao:`${numeroAplicacao}ª aplicação · ${articulacao} ${lado.toLowerCase()}`,dataPedido:localDate(requestDate),dataAplicacao,dataFaturamento,data:dataAplicacao,executor,atendente:'Equipe de demonstração'},
         stage,checks:{...emptyChecks(),...checks},version:1,createdAt:at,updatedAt:at,
         events:[{at,actor:'Demonstração',action:'Cenário fictício carregado para explorar esta etapa'}]};
     });
   }
   async list() { return {items:structuredClone(this.records),nextCursor:null}; }
   async detail(id) { const found=this.records.find(r=>r.id===id);if(!found) throw problem(404,'Atendimento não encontrado.');return structuredClone(found); }
+  async patient(prontuario) {
+    const found=this.records.filter(r=>r.fields.prontuario===String(prontuario).trim().toUpperCase()).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt))[0];
+    return {patient:found?structuredClone({prontuario:found.fields.prontuario,paciente:found.fields.paciente,convenio:found.fields.convenio}):null};
+  }
   async create(input) {
     if(!['recepcao','admin'].includes(this.role)) throw problem(403,'A abertura de guias é feita pelo setor de autorizações.');
-    const fields=validateCaseFields(input.fields),at=new Date().toISOString();
+    const fields=validateCaseFields({...input.fields,atendente:'Equipe de demonstração'}),at=new Date().toISOString();
     const record={id:input.id,fields,stage:'recebido',checks:emptyChecks(),version:1,createdAt:at,updatedAt:at,events:[{at,actor:this.role,action:'Guia cadastrada no controle'}]};
     this.records.unshift(record);return structuredClone(record);
   }
@@ -49,6 +58,7 @@ export class ApiStore {
   }
   async session() { const user=await this.request('/session');this.role=user.role;return user; }
   references() { return this.request('/references'); }
+  patient(prontuario) { return this.request('/patient?prontuario='+encodeURIComponent(prontuario)); }
   list(cursor='') { return this.request('/cases'+(cursor ? '?cursor='+encodeURIComponent(cursor) : '')); }
   detail(id) { return this.request('/cases/'+encodeURIComponent(id)); }
   create(input) { return this.request('/cases',{method:'POST',body:JSON.stringify(input)}); }

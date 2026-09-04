@@ -8,17 +8,28 @@ export const CHECKS = {
   execucao: 'Execução conferida', documentos: 'Documentação conferida'
 };
 export const ROLES = {recepcao:'Setor de Autorizações',admin:'Administrador'};
-export const CONVENIOS = ['Bradesco O.P', 'Bradesco Saúde', 'Cabesp', 'CarePlus', 'Cassi', 'CET', 'Economus', 'GEAP', 'Mediservice', 'Metrus', 'NotreDame', 'Omint', 'Particular', 'Petrobrás', 'Seguros Unimed', 'Vivest'];
-export const MEDICACOES = ['Diprospan', 'Osteonil', 'Suprahyal', 'Synolis', 'KD Intra-articular'];
-export const MEDICOS = ['Dr. Ali', 'Dr. Arthur', 'Dr. Diego', 'Dr. Gustavo', 'Dr. Jorge', 'Dr. Lucas', 'Dr. Lucio', 'Dr. Renato', 'Dr. Victor', 'Dr. Yuri'];
+// Somente exemplos fictícios ficam no frontend público. Em produção, as listas
+// reais são carregadas do backend depois do login.
+export const CONVENIOS = ['Convênio Exemplo A', 'Convênio Exemplo B', 'Particular'];
+export const MEDICACOES = ['Medicação Exemplo A', 'Medicação Exemplo B'];
+export const MEDICOS = ['Dr. Exemplo A', 'Dra. Exemplo B'];
 export const ARTICULACOES = ['Joelho', 'Ombro', 'Quadril', 'Tornozelo', 'Cotovelo', 'Punho', 'Mão', 'Pé', 'Outra articulação'];
 export const LADOS = ['Direito', 'Esquerdo'];
+export const PROCESS_CONDITIONS = [
+  ['regular','Sem pendência'],
+  ['pedido_correcao','Pedido médico precisa de correção'],
+  ['aguardando_ressonancia','Aguardando envio da ressonância'],
+  ['falta_carimbo','Falta carimbo ou assinatura'],
+  ['aguardando_laudo','Aguardando relatório ou laudo'],
+  ['divergencia_dados','Dados do processo estão divergentes'],
+  ['outro','Outra pendência']
+];
 export const FIELD_LABELS = {paciente:'Paciente', convenio:'Convênio', medicacao:'Medicação', aplicacao:'Detalhes da aplicação', data:'Data da aplicação', executor:'Médico executor', atendente:'Responsável pelo registro'};
 export const WORKFLOW_FIELD_LABELS = {
   prontuario:'Prontuário', paciente:'Paciente', convenio:'Convênio', executor:'Médico',
   medicacao:'Medicação', articulacao:'Articulação', lado:'Lado', numeroAplicacao:'Aplicação',
   pedidoRacimed:'Pedido no Racimed', numeroGuia:'Número da guia', data:'Data da aplicação',
-  observacao:'Pendência / observação', atendente:'Responsável'
+  condicaoProcesso:'Condição do processo', observacao:'Detalhes da pendência', atendente:'Responsável'
 };
 export const problem = (status, message) => Object.assign(new Error(message), {status});
 export function localDate(date = new Date()) {
@@ -45,7 +56,7 @@ export function validateFields(input) {
   }
   return out;
 }
-export function validateCaseFields(input) {
+export function validateCaseFields(input,references={convenios:CONVENIOS,medicacoes:MEDICACOES,medicos:MEDICOS}) {
   if (!input || typeof input !== 'object') throw problem(400, 'Preencha os dados do atendimento.');
   const articulacaoSelecionada=String(input.articulacao || '').trim();
   const articulacao=articulacaoSelecionada === 'Outra articulação' ? String(input.articulacaoOutra || '').trim() : articulacaoSelecionada;
@@ -55,16 +66,20 @@ export function validateCaseFields(input) {
     medicacao:String(input.medicacao || '').trim(), executor:String(input.executor || '').trim(),
     articulacao, lado:String(input.lado || '').trim(), numeroAplicacao:String(input.numeroAplicacao || '').trim(),
     pedidoRacimed:String(input.pedidoRacimed || '').trim(), numeroGuia:String(input.numeroGuia || '').trim().toUpperCase(),
-    pendencia:Boolean(input.pendencia),observacao:String(input.observacao || '').trim(), data:String(input.data || '').trim(),
+    condicaoProcesso:String(input.condicaoProcesso || (input.pendencia?'outro':'regular')).trim(),
+    observacao:String(input.observacao || '').trim(), data:String(input.data || '').trim(),
     atendente:String(input.atendente || '').trim()
   };
   if(!/^[A-Z0-9./-]{2,30}$/.test(structured.prontuario)) throw problem(400,'Informe o número do prontuário do Racimed.');
   if(!structured.paciente || structured.paciente.length>120) throw problem(400,'Confira o nome do paciente.');
-  if(!CONVENIOS.includes(structured.convenio) || !MEDICOS.includes(structured.executor) || (structured.medicacao && !MEDICACOES.includes(structured.medicacao))) throw problem(400,'Confira convênio, médico e medicação.');
+  if(!references.convenios?.includes(structured.convenio) || !references.medicos?.includes(structured.executor) || (structured.medicacao && !references.medicacoes?.includes(structured.medicacao))) throw problem(400,'Confira convênio, médico e medicação.');
   if(!articulacao || articulacao.length>60 || (articulacaoSelecionada!=='Outra articulação' && !ARTICULACOES.includes(articulacao))) throw problem(400,'Informe a articulação.');
   if(!LADOS.includes(structured.lado)) throw problem(400,'Informe o lado da articulação. Cada lado utiliza sua própria guia.');
   if(!['1','2','3'].includes(structured.numeroAplicacao)) throw problem(400,'Informe se é a 1ª, 2ª ou 3ª aplicação.');
-  if(structured.pedidoRacimed.length>60 || structured.numeroGuia.length>60 || structured.observacao.length>300 || structured.atendente.length<2 || structured.atendente.length>120) throw problem(400,'Confira os dados da guia e o responsável pelo registro.');
+  if(!PROCESS_CONDITIONS.some(([key])=>key===structured.condicaoProcesso)) throw problem(400,'Informe a condição atual do processo.');
+  structured.pendencia=structured.condicaoProcesso!=='regular';
+  if(structured.condicaoProcesso==='outro' && !structured.observacao) throw problem(400,'Explique a outra pendência no campo de detalhes.');
+  if(structured.pedidoRacimed.length>60 || structured.numeroGuia.length>60 || structured.observacao.length>500 || structured.atendente.length<2 || structured.atendente.length>120) throw problem(400,'Confira os dados da guia e o responsável pelo registro.');
   if(structured.data && !validDate(structured.data)) throw problem(400,'Informe uma data de aplicação válida.');
   structured.aplicacao=`${structured.numeroAplicacao}ª aplicação · ${structured.articulacao} ${structured.lado.toLowerCase()}`;
   return structured;
@@ -73,12 +88,20 @@ export function updateCaseFields(previous,input) {
   if(!input || typeof input!=='object')throw problem(400,'Confira os dados da guia.');
   const numeroGuia=String(input.numeroGuia ?? previous.numeroGuia ?? '').trim().toUpperCase();
   const observacao=String(input.observacao ?? previous.observacao ?? '').trim();
-  const pendencia=typeof input.pendencia==='boolean'?input.pendencia:Boolean(previous.pendencia);
+  const fallback=previous.condicaoProcesso || (previous.pendencia?'outro':'regular');
+  const condicaoProcesso=String(input.condicaoProcesso ?? fallback).trim();
+  const pendencia=condicaoProcesso!=='regular';
   const data=String(input.data ?? previous.data ?? '').trim();
   if(numeroGuia.length>60)throw problem(400,'O número da guia está muito longo.');
-  if(observacao.length>300)throw problem(400,'A observação deve ter no máximo 300 caracteres.');
+  if(!PROCESS_CONDITIONS.some(([key])=>key===condicaoProcesso))throw problem(400,'Informe a condição atual do processo.');
+  if(condicaoProcesso==='outro' && !observacao)throw problem(400,'Explique a outra pendência no campo de detalhes.');
+  if(observacao.length>500)throw problem(400,'Os detalhes devem ter no máximo 500 caracteres.');
   if(data && !validDate(data))throw problem(400,'Informe uma data de aplicação válida.');
-  return {...previous,numeroGuia,observacao,pendencia,data};
+  return {...previous,numeroGuia,condicaoProcesso,observacao,pendencia,data};
+}
+export function processLabel(fields) {
+  const key=fields.condicaoProcesso || (fields.pendencia?'outro':'regular');
+  return PROCESS_CONDITIONS.find(([value])=>value===key)?.[1] || 'Condição não informada';
 }
 export function applicationLabel(fields) {
   return fields.numeroAplicacao ? `${fields.numeroAplicacao}ª aplicação` : 'Aplicação';

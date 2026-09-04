@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {transition,emptyChecks,validateFields,validateCaseFields,validDate,jointLabel} from '../assets/domain.js';
 import {DemoStore} from '../assets/store.js';
-const fields={paciente:'Paciente de teste',convenio:'Particular',medicacao:'',aplicacao:'Procedimento de teste',numeroGuia:'GUIA-1',pendencia:false,observacao:'',data:'2026-01-01',executor:'Dr. Arthur',atendente:'Autorizações'};
+const fields={paciente:'Paciente de teste',convenio:'Particular',medicacao:'',aplicacao:'Procedimento de teste',numeroGuia:'GUIA-1',pendencia:false,observacao:'',data:'2026-01-01',executor:'Dr. Exemplo A',atendente:'Autorizações'};
 const all={autorizada:true,assinada:true,execucao:true,documentos:true};
 const record=(stage='recebido',checks=emptyChecks())=>({fields,stage,checks,version:1});
-const workflowFields={prontuario:'ab-102',paciente:'Paciente de teste',convenio:'Particular',medicacao:'',articulacao:'Joelho',lado:'Direito',numeroAplicacao:'2',pedidoRacimed:'RC-9',data:'2026-01-01',executor:'Dr. Arthur',atendente:'Recepção'};
+const workflowFields={prontuario:'ab-102',paciente:'Paciente de teste',convenio:'Particular',medicacao:'',articulacao:'Joelho',lado:'Direito',numeroAplicacao:'2',pedidoRacimed:'RC-9',condicaoProcesso:'regular',observacao:'',data:'2026-01-01',executor:'Dr. Exemplo A',atendente:'Autorizações'};
 test('normaliza os campos e rejeita datas inexistentes',()=>{
   assert.equal(validateFields({...fields,paciente:'  Ana  '}).paciente,'Ana');
   assert.equal(validDate('2026-02-30'),false);assert.equal(validDate('2028-02-29'),true);
@@ -20,6 +20,12 @@ test('estrutura uma guia por articulação e preserva a sequência',()=>{
 test('aceita outra articulação somente quando ela é identificada',()=>{
   assert.equal(validateCaseFields({...workflowFields,articulacao:'Outra articulação',articulacaoOutra:'Sacroilíaca'}).articulacao,'Sacroilíaca');
   assert.throws(()=>validateCaseFields({...workflowFields,articulacao:'Outra articulação',articulacaoOutra:''}),{status:400});
+});
+test('estrutura a condição do processo e exige detalhes para outra pendência',()=>{
+  const pending=validateCaseFields({...workflowFields,condicaoProcesso:'aguardando_ressonancia',observacao:'Paciente enviará por e-mail'});
+  assert.equal(pending.pendencia,true);assert.equal(pending.condicaoProcesso,'aguardando_ressonancia');
+  assert.equal(validateCaseFields(workflowFields).pendencia,false);
+  assert.throws(()=>validateCaseFields({...workflowFields,condicaoProcesso:'outro',observacao:''}),{status:400});
 });
 test('rejeita campos obrigatórios, enumerações e tamanho inválidos',()=>{
   for(const change of [{paciente:' '},{convenio:'Não existe'},{executor:'Outro'},{medicacao:'Outro'},{aplicacao:'x'.repeat(301)}])assert.throws(()=>validateFields({...fields,...change}),{status:400});
@@ -36,7 +42,7 @@ test('todos os documentos são necessários para deixar a guia pronta',()=>{
 test('uma pendência impede avanço até ser resolvida',()=>{
   const pendingRecord={...record(),fields:{...fields,pendencia:true}};
   assert.throws(()=>transition(pendingRecord,{version:1,stage:'solicitado'},'recepcao'),{status:400});
-  assert.equal(transition(pendingRecord,{version:1,fields:{pendencia:false,observacao:'Corrigido'},stage:'solicitado'},'recepcao').stage,'solicitado');
+  assert.equal(transition(pendingRecord,{version:1,fields:{condicaoProcesso:'regular',observacao:'Corrigido'},stage:'solicitado'},'recepcao').stage,'solicitado');
 });
 test('somente o setor de autorizações ou administrador altera guias',()=>{
   assert.throws(()=>transition(record(),{version:1,checks:all},'faturamento'),{status:403});
@@ -60,4 +66,10 @@ test('demonstração registra histórico e reinicia sem persistir dados',async()
   const updated=await demo.update(item.id,{version:1,stage:'faturamento'});
   assert.equal(updated.events.length,2);assert.match(updated.events.at(-1).action,/faturamento/);
   assert.equal((await new DemoStore().detail(item.id)).stage,'conferencia');
+});
+test('demonstração cadastra uma guia e aceita articulação personalizada',async()=>{
+  const demo=new DemoStore(),before=(await demo.list()).items.length;
+  const created=await demo.create({id:crypto.randomUUID(),fields:{...workflowFields,articulacao:'Outra articulação',articulacaoOutra:'Sacroilíaca'}});
+  assert.equal(created.fields.articulacao,'Sacroilíaca');assert.equal(created.stage,'recebido');
+  assert.equal((await demo.list()).items.length,before+1);
 });

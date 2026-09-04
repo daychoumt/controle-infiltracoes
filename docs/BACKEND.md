@@ -50,6 +50,20 @@ Cole um objeto JSON com os UIDs reais quando a ferramenta pedir o valor. Exemplo
 
 No painel Cloudflare, a alternativa é **Configurações → Variáveis e segredos → Adicionar**, nome `STAFF_ROLES`, tipo **Segredo**. Sem essa lista, todo usuário é recusado, inclusive quem acabou de criar uma conta no Firebase. Mantenha apenas os acessos necessários.
 
+Cadastre também as listas operacionais como segredo, para que médicos, convênios e medicamentos não fiquem expostos no GitHub público:
+
+```sh
+npx wrangler secret put REFERENCE_DATA
+```
+
+Cole um JSON com as listas oficiais da clínica:
+
+```json
+{"convenios":["Convênio 1"],"medicacoes":["Medicação 1"],"medicos":["Médico 1"]}
+```
+
+Use os nomes reais somente no segredo do Worker. A demonstração pública utiliza exemplos fictícios. Depois do login, o painel busca essas listas na rota protegida `/references`.
+
 ## 3. Conectar a interface
 
 Atualize `assets/config.js`:
@@ -86,6 +100,7 @@ Todas as rotas de dados exigem `Authorization: Bearer <ID_TOKEN>` e usuário lib
 | Método / rota | Resultado |
 | --- | --- |
 | `GET /session` | Perfil autorizado no servidor |
+| `GET /references` | Listas de convênios, medicamentos e médicos após autenticação |
 | `GET /cases` | Até 100 atendimentos, mais recentes primeiro, e cursor da próxima página |
 | `GET /cases?cursor=...` | Página seguinte; use o cursor retornado, sem montar manualmente |
 | `GET /cases/:id` | Dados, etapa, versão, conferência e histórico |

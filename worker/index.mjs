@@ -1,6 +1,7 @@
 import {problem,validateCaseFields,emptyChecks,transition} from '../assets/domain.js';
 import {authenticate} from './auth.mjs';
 import {Repository} from './repository.mjs';
+import {parseReferences} from './references.mjs';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 async function readJson(request) {
   if(!request.headers.get('Content-Type')?.startsWith('application/json'))throw problem(415,'Envie os dados em JSON.');
@@ -18,13 +19,14 @@ export async function handle(request,env,dependencies={}) {
   if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{...headers,'Access-Control-Allow-Methods':'GET, POST, PATCH, OPTIONS','Access-Control-Allow-Headers':'Authorization, Content-Type','Access-Control-Max-Age':'600'}});
   try {
     const url=new URL(request.url),match=/^\/cases\/([\da-f-]+)$/i.exec(url.pathname);
-    if(!['/session','/cases'].includes(url.pathname) && !match)throw problem(404,'Rota não encontrada.');
+    if(!['/session','/references','/cases'].includes(url.pathname) && !match)throw problem(404,'Rota não encontrada.');
     if(!env.FIREBASE_PROJECT_ID || !env.FIREBASE_WEB_API_KEY || !env.DB)throw problem(503,'O painel da equipe ainda precisa ser configurado.');
     const token=/^Bearer (\S+)$/.exec(request.headers.get('Authorization') || '')?.[1];
     if(!token || token.length>8192)throw problem(401,'Entre com sua conta da equipe.');
     const user=await (dependencies.authenticate || authenticate)(token,env);
     const repository=dependencies.repository || new Repository(env.DB);
     if(url.pathname==='/session' && request.method==='GET')return reply(200,{role:user.role});
+    if(url.pathname==='/references' && request.method==='GET')return reply(200,parseReferences(env.REFERENCE_DATA));
     if(url.pathname==='/cases' && request.method==='GET') {
       const cursor=url.searchParams.get('cursor') || '';
       if(cursor) {
@@ -39,7 +41,7 @@ export async function handle(request,env,dependencies={}) {
       if(!['admin','recepcao'].includes(user.role))throw problem(403,'A abertura de guias é feita pelo setor de autorizações.');
       const input=await readJson(request);
       if(!input || !uuid.test(input.id))throw problem(400,'Protocolo inválido.');
-      const fields=validateCaseFields(input.fields),at=new Date().toISOString();
+      const fields=validateCaseFields(input.fields,parseReferences(env.REFERENCE_DATA)),at=new Date().toISOString();
       return reply(201,await repository.create({id:input.id,fields,stage:'recebido',checks:emptyChecks(),version:1,createdAt:at,updatedAt:at},user));
     }
     if(match && request.method==='PATCH') {

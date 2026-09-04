@@ -1190,6 +1190,50 @@ dialog::backdrop {
 .large-dialog .form-section {
   padding-inline:0;
 }
+.application-choice {
+  border:0;
+  padding:0;
+  margin:0;
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:10px;
+}
+.application-choice legend {
+  font-size:14px;
+  font-weight:700;
+  margin-bottom:10px;
+}
+.application-choice label {
+  position:relative;
+}
+.application-choice input {
+  position:absolute;
+  opacity:0;
+  pointer-events:none;
+}
+.application-choice span {
+  min-height:58px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+  background:#fff;
+  cursor:pointer;
+  font-size:14px;
+  transition:border-color .15s ease,background .15s ease,box-shadow .15s ease;
+}
+.application-choice input:checked+span {
+  border-color:var(--brand);
+  background:#eef5f2;
+  box-shadow:0 0 0 3px #2f67561f;
+}
+.application-choice input:focus-visible+span {
+  outline:3px solid #2f675630;
+  outline-offset:2px;
+}
+.application-choice strong {font-size:18px;}
 #login-form {
   display:grid;
   gap:20px;
@@ -1636,6 +1680,8 @@ dialog::backdrop {
   .print-table th:nth-child(7) {width:16mm;}
   .print-table th:nth-child(8) {width:18mm;}
   .print-table th:nth-child(9) {width:19mm;}
+  .print-table th:nth-child(10) {width:24mm;}
+  .print-table th:nth-child(11) {width:57mm;}
   .print-totals {
     display:flex;
     justify-content:space-between;

@@ -6,17 +6,18 @@ Controle interno do setor de autorizações para acompanhar cada guia, do pedido
 
 ## O problema
 
-Registrar uma aplicação não garante que sua guia chegue ao faturamento. Informações distribuídas entre recepção, planilha e documentos dificultam identificar o próximo responsável e as pendências de cada atendimento.
+Receber um pedido não garante que sua guia chegue ao faturamento. Informações distribuídas entre planilha, e-mails e documentos dificultam identificar o que está parado e o que falta corrigir.
 
-O projeto evoluiu de um formulário conectado ao Google Apps Script para uma interface de trabalho do setor de autorizações. O sistema reduz a atualização manual aos acontecimentos reais da rotina e produz as relações impressas usadas na entrega.
+O projeto evoluiu de um formulário isolado para uma interface única do setor de autorizações. O sistema reduz a atualização manual aos acontecimentos reais da rotina, registra a condição de cada processo e produz as relações impressas usadas na entrega.
 
 ## Experimente em dois minutos
 
 1. Abra o painel. Todos os registros são fictícios e identificados como demonstração.
 2. Abra **Ana Exemplo** para consultar, pelo prontuário, suas aplicações anteriores em diferentes articulações.
 3. Abra uma guia com pendência para ver o alerta destacado e a observação do que precisa ser corrigido.
-4. Em uma guia autorizada, informe o número, confira os documentos e avance com poucos cliques.
-5. Abra **Fechamento mensal**, escolha o tipo de folha e veja as relações separadas por convênio, prontas para impressão e assinatura.
+4. Cadastre uma guia escolhendo claramente 1ª, 2ª ou 3ª aplicação e uma condição como falta de carimbo ou ressonância aguardando envio.
+5. Em uma guia autorizada, informe o número, confira os documentos e avance com poucos cliques.
+6. Abra **Fechamento mensal**, escolha o tipo de folha e veja as relações separadas por convênio, prontas para impressão e assinatura.
 
 A demonstração é interativa, mas não grava dados em servidores ou no armazenamento do navegador. Recarregar a página restaura os exemplos. Não insira informações reais nessa demonstração.
 
@@ -24,29 +25,31 @@ A demonstração é interativa, mas não grava dados em servidores ou no armazen
 
 | Área | Comportamento |
 | --- | --- |
-| Registro da clínica | Formulário em três etapas, revisão antes do envio, validação e integração existente com Apps Script preservada |
+| Entrada única | O endereço principal abre o controle; o formulário antigo que disparava e-mail não é mais utilizado pelo site |
 | Cadastro operacional | Prontuário Racimed, paciente, convênio, pedido, médico, articulação, lado e sequência da aplicação |
 | Regra da guia | Cada combinação de articulação e lado é registrada como uma guia independente |
 | Acompanhamento | Fila visual por situação, pesquisa por paciente, prontuário, número da guia, convênio e articulação |
 | Conferência | Guia autorizada, guia assinada, execução e documentação conferidas |
 | Fluxo enxuto | Novo pedido → na operadora/em análise → autorizado → realizado → pronto → entregue ao faturamento |
 | Pendências | Correções aparecem como alerta separado e impedem avanço até serem resolvidas |
+| Condição do processo | Pedido para corrigir, ressonância aguardando envio, falta de carimbo/assinatura, laudo aguardando, divergência ou outra pendência |
 | Responsabilidade | O setor de autorizações mantém o controle; recepção e faturamento recebem as relações impressas |
 | Histórico | Aplicações agrupadas pelo prontuário, além de ações, datas, perfil e versão de cada atendimento |
 | Fechamento mensal | Movimento completo, pendências ou entrega; folhas A4 separadas por convênio com campos de assinatura |
-| Relação impressa | Paciente, prontuário, número da guia, médico, articulação, lado, 1ª/2ª/3ª aplicação, data, situação e totais |
+| Relação impressa | Paciente, prontuário, número da guia, médico, articulação, lado, 1ª/2ª/3ª aplicação, data, situação, condição, observação e totais |
 | Backend | API em Cloudflare Workers, autenticação Firebase e banco SQL D1 |
 | Concorrência | Versão esperada por atualização; registro e evento gravados na mesma transação |
 | Acesso | API nega usuários fora da lista de equipe, mesmo que tenham login válido |
-| Qualidade | 28 testes automatizados e verificações de sintaxe e referências locais no GitHub Actions |
+| Cadastros auxiliares | Listas reais de médicos, convênios e medicamentos ficam no backend; a demonstração usa exemplos fictícios |
+| Qualidade | 31 testes automatizados e verificações de sintaxe e referências locais no GitHub Actions |
 
 ## O que está publicado e o que depende de configuração
 
-- **Formulário original:** continua enviando os mesmos sete campos à automação existente. O código do Apps Script não está neste repositório. Como a resposta é opaca (`no-cors`), o site informa que o envio ocorreu e orienta conferir a planilha; não afirma que a gravação foi confirmada.
+- **Entrada principal:** o endereço inicial abre o painel. O formulário público antigo e seu endpoint de notificação não participam mais do fluxo.
 - **Painel público:** demonstração independente com dados fictícios, sem acesso a pacientes da clínica.
 - **Painel da equipe:** código implementado, mas acesso real depende de criar o D1, configurar um projeto Firebase da clínica e liberar os usuários no Worker. A configuração pública está vazia por padrão.
 
-O painel não importa a planilha nem envia e-mails. O cadastro no painel e o envio do formulário à automação são operações separadas. A impressão usa os dados já cadastrados no painel e não altera os registros. A integração com a planilha pode ser evoluída quando o código e o contrato do Apps Script estiverem disponíveis.
+O painel não envia e-mails. O banco protegido é a fonte principal e a impressão usa os dados já cadastrados sem alterar os registros. Uma planilha de backup só deve ser conectada depois que a clínica definir o arquivo oficial e quem poderá acessá-lo.
 
 ## Arquitetura
 
@@ -57,7 +60,7 @@ O painel não importa a planilha nem envia e-mails. O cadastro no painel e o env
 | API | Cloudflare Worker com autenticação em cada requisição e respostas sem cache |
 | Identidade | Firebase Authentication; contas e perfis liberados explicitamente no servidor |
 | Persistência da equipe | D1, tabelas `cases` e `events`, consultas parametrizadas e transações |
-| Automação existente | Google Apps Script / planilha, preservados no formulário de registro |
+| Cópia de segurança | Integração futura com a planilha oficial da clínica, sem notificações e sem trabalho manual |
 | Hospedagem | GitHub Pages com domínio próprio |
 
 O projeto não depende de framework nem de uma etapa de compilação para publicar o frontend. A base funciona com módulos nativos, o que permite estudar separadamente interface, domínio, autenticação e persistência.
@@ -71,7 +74,7 @@ npm run check
 npm test
 ```
 
-Para abrir a interface localmente, sirva esta pasta por HTTP, por exemplo com `python3 -m http.server 8080`, e acesse `/painel.html`. Evite testar o envio do formulário real: ele está conectado à automação da clínica.
+Para abrir a interface localmente, sirva esta pasta por HTTP, por exemplo com `python3 -m http.server 8080`, e acesse `/painel.html`. Utilize somente dados fictícios enquanto o backend protegido não estiver configurado.
 
 ```text
 assets/       Interface, validações e modos demo/equipe
@@ -84,7 +87,7 @@ docs/        Configuração do backend
 
 ## Limites atuais
 
-Sem anexos, importação automática do Racimed ou decisões clínicas automatizadas. Como não existe integração disponível com o Racimed, o primeiro cadastro ainda é manual; número da guia, data da aplicação, pendência, observação e conferência podem ser atualizados depois. Guias entregues permanecem disponíveis para histórico e impressão.
+Sem anexos, importação automática do Racimed ou decisões clínicas automatizadas. Como não existe integração disponível com o Racimed, o primeiro cadastro ainda é manual; número da guia, data da aplicação, condição, observação e conferência podem ser atualizados depois. Guias entregues permanecem disponíveis para histórico e impressão.
 
 Nenhum dado real foi usado nos testes. A ativação para a clínica exige validar o fluxo e as permissões em um ambiente de homologação.
 

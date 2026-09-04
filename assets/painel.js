@@ -1,7 +1,7 @@
-import {STAGES,CHECKS,ROLES,CONVENIOS,WORKFLOW_FIELD_LABELS,emptyChecks,pending,nextStage,canEdit,localDate,validateCaseFields,applicationLabel,jointLabel} from './domain.js?v=4';
-import {$,node,fillOptions,closeDialogs,summary,displayDate} from './ui.js?v=4';
-import {DemoStore,ApiStore} from './store.js?v=4';
-import {config} from './config.js?v=4';
+import {STAGES,CHECKS,ROLES,CONVENIOS,WORKFLOW_FIELD_LABELS,emptyChecks,pending,nextStage,canEdit,localDate,applicationLabel,jointLabel,processLabel} from './domain.js?v=5';
+import {$,node,fillOptions,closeDialogs,summary,displayDate} from './ui.js?v=5';
+import {DemoStore,ApiStore} from './store.js?v=5';
+import {config} from './config.js?v=5';
 fillOptions();closeDialogs();
 let store=new DemoStore(),records=[],reportRecords=[],cursor=null,filter='all',selected=null,epoch=0,busy=false,createId=null,loading=false;
 const configured=Boolean(config.apiUrl && config.firebaseApiKey);
@@ -32,13 +32,13 @@ function render() {
     button.addEventListener('click',()=>{filter=key;render(); const buttons=[...filters.children];buttons.find(b=>b.getAttribute('aria-pressed')==='true')?.focus();});filters.append(button);
   }
   const query=normalize($('#search').value.trim());
-  const visible=records.filter(r=>(filter==='all'||(filter==='pendencia'?r.fields.pendencia:r.stage===filter)) && (!$('#only-pending').checked||['realizado','conferencia'].includes(r.stage)) && normalize([r.fields.paciente,r.fields.prontuario,r.fields.numeroGuia,r.fields.convenio,r.fields.articulacao,r.id].filter(Boolean).join(' ')).includes(query));
+  const visible=records.filter(r=>(filter==='all'||(filter==='pendencia'?r.fields.pendencia:r.stage===filter)) && (!$('#only-pending').checked||['realizado','conferencia'].includes(r.stage)) && normalize([r.fields.paciente,r.fields.prontuario,r.fields.numeroGuia,r.fields.convenio,r.fields.articulacao,processLabel(r.fields),r.fields.observacao,r.id].filter(Boolean).join(' ')).includes(query));
   const tbody=$('#cases');tbody.replaceChildren();
   for(const record of visible) {
     const tr=node('tr'),patient=node('td');patient.append(node('strong',record.fields.paciente),node('small',record.fields.prontuario ? `Prontuário ${record.fields.prontuario}` : record.id.startsWith('demo-')?record.id.toUpperCase():'AM-'+record.id.slice(0,8).toUpperCase()));
     const joint=node('td',jointLabel(record.fields));joint.append(node('small',record.fields.pedidoRacimed ? `Pedido ${record.fields.pedidoRacimed}` : 'Uma guia para esta articulação'));
     const guide=node('td');guide.append(node('strong',record.fields.numeroGuia || 'Número ainda não informado'),node('small',`${applicationLabel(record.fields)} · ${record.fields.data?displayDate(record.fields.data):'Sem data definida'}`));
-    const stage=node('td');stage.append(node('span',stageLabel(record.stage),'pill '+record.stage));if(record.fields.pendencia)stage.append(node('small','⚠ Pedido com pendência','pending-note'));
+    const stage=node('td');stage.append(node('span',stageLabel(record.stage),'pill '+record.stage));if(record.fields.pendencia)stage.append(node('small',`⚠ ${processLabel(record.fields)}`,'pending-note'));
     const progress=node('td'),bars=node('div',null,'check-progress');bars.setAttribute('aria-hidden','true');
     for(const checked of Object.values(record.checks)) bars.append(node('i',null,checked?'done':''));
     progress.append(bars,node('small',`${4-pending(record).length}/4 itens conferidos`));
@@ -63,7 +63,7 @@ function renderDetail() {
   $('#case-protocol').textContent=`GUIA ${record.id.startsWith('demo-')?record.id.toUpperCase():record.id.slice(0,8).toUpperCase()} · VERSÃO ${record.version}`;
   $('#case-guide-number').textContent=record.fields.numeroGuia || 'Ainda não informado';
   $('#case-status').textContent=stageLabel(record.stage);$('#case-status').className=`pill ${record.stage}`;
-  $('#case-guide').value=record.fields.numeroGuia || '';$('#case-date').value=record.fields.data || '';$('#case-observation').value=record.fields.observacao || '';$('#case-pending').checked=Boolean(record.fields.pendencia);
+  $('#case-guide').value=record.fields.numeroGuia || '';$('#case-date').value=record.fields.data || '';$('#case-condition').value=record.fields.condicaoProcesso || (record.fields.pendencia?'outro':'regular');$('#case-observation').value=record.fields.observacao || '';
   summary($('#case-summary'),record.fields,WORKFLOW_FIELD_LABELS);
   $('#case-steps').replaceChildren();
   const current=STAGES.findIndex(([key])=>key===record.stage);
@@ -80,7 +80,7 @@ function renderDetail() {
     const item=node('label',null,'check-item'),input=node('input');input.type='checkbox';input.name=key;input.checked=record.checks[key];input.disabled=!editable;item.append(input,node('span',label));checks.append(item);
   }
   $('#save-checks').hidden=!editable;
-  $('#case-guide').disabled=$('#case-date').disabled=$('#case-observation').disabled=$('#case-pending').disabled=!editable;
+  $('#case-guide').disabled=$('#case-date').disabled=$('#case-condition').disabled=$('#case-observation').disabled=!editable;
   $('#check-help').textContent=record.stage==='faturamento'?'Entrega registrada. A guia permanece disponível para consulta e impressão.':'Marque somente o que já foi conferido pelo setor.';
   const next=nextStage(record.stage);
   $('#advance').hidden=!next || !editable;
@@ -95,7 +95,7 @@ async function save(advance=false) {
   if(busy || !selected) return;busy=true;
   const current=store,run=epoch,previous=selected;
   const checks=Object.fromEntries([...$('#case-checks').querySelectorAll('input')].map(i=>[i.name,i.checked]));
-  const fields={numeroGuia:$('#case-guide').value,data:$('#case-date').value,observacao:$('#case-observation').value,pendencia:$('#case-pending').checked};
+  const fields={numeroGuia:$('#case-guide').value,data:$('#case-date').value,condicaoProcesso:$('#case-condition').value,observacao:$('#case-observation').value};
   $('#save-checks').disabled=$('#advance').disabled=true;
   try {
     const updated=await current.update(previous.id,{version:previous.version,fields,checks,stage:advance?nextStage(previous.stage):previous.stage});
@@ -113,6 +113,7 @@ $('#clear-filters').addEventListener('click',()=>{filter='all';$('#search').valu
 $('#refresh').addEventListener('click',()=>{report('');refresh();});$('#load-more').addEventListener('click',()=>refresh(true));
 function resetDemo() {
   epoch++;store.clear?.();store=new DemoStore();records=[];reportRecords=[];cursor=null;filter='all';selected=null;busy=false;
+  fillOptions(document,null,true);
   $('#patient-history').replaceChildren();$('#patient-totals').textContent='';$('#report-preview').replaceChildren();$('#print-sheet').replaceChildren();
   $('#search').value='';$('#only-pending').checked=false;$('#demo-controls').hidden=false;
   $('#mode-banner').replaceChildren(node('span','Demonstração interativa · Dados fictícios. As alterações ficam só nesta aba.'));
@@ -125,17 +126,19 @@ newForm.elements.articulacao.addEventListener('change',()=>{
   const other=newForm.elements.articulacao.value==='Outra articulação';
   $('#outra-articulacao').hidden=!other;newForm.elements.articulacaoOutra.required=other;if(!other)newForm.elements.articulacaoOutra.value='';
 });
-$('#abrir-novo').addEventListener('click',()=>{
+function openNewCase() {
   newForm.reset();newForm.elements.atendente.value=store instanceof DemoStore?'Equipe de demonstração':'';
-  createId=crypto.randomUUID();$('#new-error').textContent='';$('#new-notice').textContent=store instanceof DemoStore?'Use dados fictícios. Este cadastro não envia informações à planilha ou à clínica.':'Este cadastro abre o acompanhamento no painel. O envio do formulário à planilha é uma operação separada.';newDialog.showModal();
-});
+  createId=crypto.randomUUID();$('#new-error').textContent='';$('#new-notice').textContent=store instanceof DemoStore?'Teste somente com dados fictícios. O cadastro aparecerá no painel, mas será apagado ao atualizar a página.':'Ao confirmar, a guia será salva na base protegida e aparecerá imediatamente no controle.';newDialog.showModal();
+}
+$('#abrir-novo').addEventListener('click',openNewCase);
+$('#nav-new').addEventListener('click',event=>{event.preventDefault();openNewCase();});
 newForm.addEventListener('submit',async e=>{
   e.preventDefault();if(busy)return;
-  const current=store,run=epoch;busy=true;$('#create-case').disabled=true;
+  const current=store,run=epoch;busy=true;$('#create-case').disabled=true;$('#new-error').textContent='';
   try {
-    const fields=validateCaseFields(Object.fromEntries(new FormData(newForm)));
+    const fields=Object.fromEntries(new FormData(newForm));
     const record=await current.create({id:createId,fields});if(run!==epoch)return;
-    records=[record,...records.filter(r=>r.id!==record.id)];render();newDialog.close();selected=record;renderDetail();detail.showModal();report('Guia cadastrada no controle do setor.');
+    records=[record,...records.filter(r=>r.id!==record.id)];render();newDialog.close();selected=record;renderDetail();detail.showModal();report(current instanceof DemoStore?'Guia adicionada à demonstração. Ela será apagada ao atualizar a página.':'Guia salva na base do setor e adicionada ao controle.');
   } catch(error){if(run===epoch){if(error.status===401)displayError(error);else $('#new-error').textContent=error.message || 'Não foi possível confirmar o cadastro. Confira a fila antes de tentar novamente.';}}
   finally{busy=false;$('#create-case').disabled=false;}
 });
@@ -153,10 +156,11 @@ function monthName(value) {
 }
 function reportFilter(item,type) {
   if(type==='delivery')return item.stage==='faturamento';
-  if(type==='pending')return item.stage!=='faturamento';
+  if(type==='open')return item.stage!=='faturamento';
+  if(type==='pending')return Boolean(item.fields.pendencia);
   return true;
 }
-function reportTitle(type) {return {complete:'Movimento completo',delivery:'Relação de entrega ao faturamento',pending:'Pendências do mês'}[type];}
+function reportTitle(type) {return {complete:'Movimento completo',delivery:'Relação de entrega ao faturamento',open:'Guias ainda não entregues',pending:'Processos com pendência'}[type];}
 function buildReportGroup(insurer,items,month,type) {
   const section=node('section',null,'print-insurer');
   const header=node('header',null,'print-header'),brand=node('div');brand.append(node('strong','AMOT'),node('span','Gestão de infiltrações'));
@@ -164,8 +168,8 @@ function buildReportGroup(insurer,items,month,type) {
   const meta=node('div',null,'print-meta');
   meta.append(node('span',`Convênio: ${insurer}`),node('span',`Referência: ${month.replace('-','')}-${normalize(insurer).replace(/[^a-z0-9]/g,'').slice(0,8).toUpperCase()}`),node('span',`Emitido em: ${new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short'}).format(new Date())}`));section.append(meta);
   const table=node('table',null,'print-table'),thead=node('thead'),head=node('tr');
-  for(const label of ['Nº','Paciente','Prontuário','Nº da guia','Médico','Articulação','Lado','Aplicação','Data','Situação'])head.append(node('th',label));thead.append(head);table.append(thead);
-  const body=node('tbody');items.forEach((item,index)=>{const tr=node('tr');for(const value of [String(index+1).padStart(2,'0'),item.fields.paciente,item.fields.prontuario||'—',item.fields.numeroGuia||'—',item.fields.executor,item.fields.articulacao||'—',item.fields.lado||'—',item.fields.numeroAplicacao?`${item.fields.numeroAplicacao}ª de 3`:'—',item.fields.data?displayDate(item.fields.data):'—',stageLabel(item.stage)])tr.append(node('td',value));body.append(tr);});table.append(body);section.append(table);
+  for(const label of ['Nº','Paciente','Prontuário','Nº da guia','Médico','Articulação','Lado','Aplicação','Data','Situação','Condição / observação'])head.append(node('th',label));thead.append(head);table.append(thead);
+  const body=node('tbody');items.forEach((item,index)=>{const tr=node('tr');const process=item.fields.pendencia?[processLabel(item.fields),item.fields.observacao].filter(Boolean).join(' — '):'Sem pendência';for(const value of [String(index+1).padStart(2,'0'),item.fields.paciente,item.fields.prontuario||'—',item.fields.numeroGuia||'—',item.fields.executor,item.fields.articulacao||'—',item.fields.lado||'—',item.fields.numeroAplicacao?`${item.fields.numeroAplicacao}ª de 3`:'—',item.fields.data?displayDate(item.fields.data):'—',stageLabel(item.stage),process])tr.append(node('td',value));body.append(tr);});table.append(body);section.append(table);
   const totals=node('div',null,'print-totals'),joints=new Map();for(const item of items)joints.set(item.fields.articulacao||'Não informada',(joints.get(item.fields.articulacao||'Não informada')||0)+1);
   totals.append(node('strong',`Total: ${items.length} guia${items.length===1?'':'s'}`),node('span',[...joints].map(([joint,count])=>`${joint}: ${count}`).join(' · ')));section.append(totals);
   if(type==='delivery') {
@@ -212,7 +216,8 @@ $('#login-form').addEventListener('submit',async e=>{
     const response=await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${encodeURIComponent(config.firebaseApiKey)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:form.elements.email.value.trim(),password:form.elements.password.value,returnSecureToken:true}),signal:AbortSignal.timeout(12000)});
     form.elements.password.value='';
     if(!response.ok)throw new Error('Não foi possível entrar. Confira o e-mail e a senha da equipe.');
-    const credentials=await response.json(),api=new ApiStore(config,credentials.idToken),user=await api.session();if(run!==epoch){api.clear();return;}
+    const credentials=await response.json(),api=new ApiStore(config,credentials.idToken),user=await api.session(),references=await api.references();if(run!==epoch){api.clear();return;}
+    fillOptions(document,references,true);
     store=api;records=[];cursor=null;selected=null;filter='all';$('#search').value='';$('#only-pending').checked=false;$('#demo-controls').hidden=true;
     $('#mode-banner').replaceChildren(node('span',`Painel da equipe · ${ROLES[user.role]}`));
     const logout=node('button','Sair da equipe','text-button');logout.type='button';logout.addEventListener('click',()=>{signOut();report('Sessão encerrada.');});$('#mode-banner').append(logout);

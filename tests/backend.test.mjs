@@ -6,8 +6,8 @@ import {handle} from '../worker/index.mjs';
 import {authenticate} from '../worker/auth.mjs';
 import {Repository,SQL} from '../worker/repository.mjs';
 import {emptyChecks} from '../assets/domain.js';
-const fields={prontuario:'10021',paciente:'Paciente fictício',convenio:'Particular',medicacao:'',articulacao:'Joelho',lado:'Direito',numeroAplicacao:'1',pedidoRacimed:'RC-100',aplicacao:'1ª aplicação · Joelho direito',data:'2026-01-01',executor:'Dr. Arthur',atendente:'Equipe'};
-const env={FIREBASE_PROJECT_ID:'clinic-test',FIREBASE_WEB_API_KEY:'public-test-config',DB:{},ALLOWED_ORIGINS:'https://clinic.example',STAFF_ROLES:JSON.stringify({'staff-1':'recepcao'})};
+const fields={prontuario:'10021',paciente:'Paciente fictício',convenio:'Particular',medicacao:'',articulacao:'Joelho',lado:'Direito',numeroAplicacao:'1',pedidoRacimed:'RC-100',condicaoProcesso:'regular',observacao:'',aplicacao:'1ª aplicação · Joelho direito',data:'2026-01-01',executor:'Dr. Exemplo A',atendente:'Equipe'};
+const env={FIREBASE_PROJECT_ID:'clinic-test',FIREBASE_WEB_API_KEY:'public-test-config',DB:{},ALLOWED_ORIGINS:'https://clinic.example',STAFF_ROLES:JSON.stringify({'staff-1':'recepcao'}),REFERENCE_DATA:JSON.stringify({convenios:['Particular'],medicacoes:['Medicação Exemplo A'],medicos:['Dr. Exemplo A']})};
 const user={uid:'staff-1',role:'recepcao'};
 const id='10000000-0000-4000-8000-000000000001';
 const all={autorizada:true,assinada:true,execucao:true,documentos:true};
@@ -31,6 +31,11 @@ test('preflight permitido e respostas de dados não são cacheáveis',async()=>{
 });
 test('ninguém consulta casos sem token',async()=>{
   const r=await handle(request('/cases','GET',undefined,{Authorization:''}),env);assert.equal(r.status,401);
+});
+test('listas operacionais só aparecem após autenticação',async()=>{
+  const denied=await handle(request('/references','GET',undefined,{Authorization:''}),env);assert.equal(denied.status,401);
+  const allowed=await handle(request('/references'),env,{authenticate:async()=>user});assert.equal(allowed.status,200);
+  assert.deepEqual(await allowed.json(),{convenios:['Particular'],medicacoes:['Medicação Exemplo A'],medicos:['Dr. Exemplo A']});
 });
 test('projeto não configurado permanece fechado',async()=>assert.equal((await handle(request('/cases'),{})).status,403));
 function token(overrides={}){const data={aud:'clinic-test',iss:'https://securetoken.google.com/clinic-test',sub:'staff-1',exp:Date.now()/1000+3600,auth_time:1000,...overrides};return 'header.'+Buffer.from(JSON.stringify(data)).toString('base64url')+'.signature';}
@@ -60,7 +65,7 @@ test('API grava, consulta, confere, encaminha e recebe usando SQL real',async()=
   let response=await handle(request('/cases','POST',{id,fields}),env,deps);assert.equal(response.status,201);
   let record=await response.json();assert.equal(record.events.length,1);
   for(const [version,stage,checks] of [[1,'solicitado',emptyChecks()],[2,'agendado',{...emptyChecks(),autorizada:true}],[3,'realizado',{...emptyChecks(),autorizada:true}],[4,'conferencia',all],[5,'faturamento',all]]) {
-    response=await handle(request('/cases/'+id,'PATCH',{version,stage,checks,fields:{numeroGuia:'GUIA-100',observacao:'',pendencia:false}}),env,deps);
+    response=await handle(request('/cases/'+id,'PATCH',{version,stage,checks,fields:{numeroGuia:'GUIA-100',observacao:'',condicaoProcesso:'regular'}}),env,deps);
     assert.equal(response.status,200);record=await response.json();
   }
   assert.equal(record.version,6);assert.equal(record.events.length,6);assert.equal(record.stage,'faturamento');assert.equal(record.fields.numeroGuia,'GUIA-100');

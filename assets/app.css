@@ -667,7 +667,7 @@ footer a {
 .filter-group-heading p {font-size:11px;color:var(--muted);margin:0;}
 .filter-grid {
   display:grid;
-  grid-template-columns:repeat(3,minmax(112px,1fr));
+  grid-template-columns:repeat(auto-fit,minmax(105px,1fr));
   gap:8px;
 }
 .metric {
@@ -736,11 +736,14 @@ footer a {
 }
 .filter.status-recebido {border-top-color:#667b85;}
 .filter.status-pendencia {border-top-color:#b42318;background:#fff7f5;}
-.filter.status-sem_atualizacao {border-top-color:#d4552d;background:#fff8f1;}
+.filter.status-atrasada {border-top-color:#d4552d;background:#fff8f1;}
+.filter.status-hoje {border-top-color:#1673a5;background:#f5fbff;}
 .filter.status-solicitado {border-top-color:#a66a16;}
+.filter.status-autorizado {border-top-color:#27725b;}
 .filter.status-agendado {border-top-color:#32669b;}
 .filter.status-realizado {border-top-color:#4d6d8c;}
 .filter.status-conferencia {border-top-color:#765395;}
+.filter.status-pronto_faturamento {border-top-color:#157347;background:#f4fbf7;}
 .filter.status-faturamento {border-top-color:#25704f;}
 .filter.status-cancelado {border-top-color:#7b858a;background:#f7f8f8;}
 .danger-outline {color:#8f2e27!important;border-color:#d8aaa5!important;background:#fff8f7!important;}
@@ -844,6 +847,10 @@ td .text-button {
   background:#fff1db;
   color:#865415;
 }
+.pill.autorizado {
+  background:#e8f6ef;
+  color:#24624f;
+}
 .pill.agendado {
   background:#e8f1fb;
   color:#2f5f91;
@@ -860,6 +867,10 @@ td .text-button {
   background:#f1eafa;
   color:#684487;
 }
+.pill.pronto_faturamento {
+  background:#e2f5e9;
+  color:#17633f;
+}
 .pill.cancelado {
   background:#f1f2f3;
   color:#5c656a;
@@ -868,9 +879,11 @@ td .text-button {
   box-shadow:inset 4px 0 #667b85;
 }
 .stage-row.solicitado {box-shadow:inset 4px 0 #a66a16;}
+.stage-row.autorizado {box-shadow:inset 4px 0 #27725b;}
 .stage-row.agendado {box-shadow:inset 4px 0 #32669b;}
 .stage-row.realizado {box-shadow:inset 4px 0 #4d6d8c;}
 .stage-row.conferencia {box-shadow:inset 4px 0 #765395;}
+.stage-row.pronto_faturamento {box-shadow:inset 4px 0 #157347;}
 .stage-row.faturamento {box-shadow:inset 4px 0 #25704f;}
 .stage-row.cancelado {box-shadow:inset 4px 0 #7b858a;background:#fafbfb;}
 .stage-row.has-pending {box-shadow:inset 5px 0 #b03636;background:#fffafa;}
@@ -886,6 +899,11 @@ td .text-button {
   font-weight:700;
   margin-top:7px;
 }
+.attention-note {font-weight:650;white-space:normal;line-height:1.35;}
+.attention-note.atrasada {color:#a33d20;}
+.attention-note.pendencia {color:#a12727;}
+.attention-note.hoje {color:#12658f;}
+.attention-note.regular {color:#60727a;}
 .check-progress {
   display:flex;
   gap:4px;
@@ -1261,6 +1279,45 @@ dialog::backdrop {
   color:var(--muted);
   font-size:12px;
 }
+.batch-items {
+  margin:20px 0;
+  border:1px solid var(--line);
+  border-radius:12px;
+  overflow:hidden;
+  max-height:330px;
+  overflow-y:auto;
+}
+.batch-items-heading {
+  display:flex;
+  justify-content:space-between;
+  gap:16px;
+  padding:14px 16px;
+  background:#f5f8f8;
+  border-bottom:1px solid var(--line);
+  font-size:12px;
+  color:var(--muted);
+}
+.batch-items-heading strong {color:var(--ink);}
+.batch-item {
+  display:flex;
+  flex-direction:row;
+  align-items:flex-start;
+  gap:12px;
+  padding:14px 16px;
+  border-bottom:1px solid #edf0f1;
+  cursor:pointer;
+}
+.batch-item:last-child {border-bottom:0;}
+.batch-item:hover {background:#fafcfc;}
+.batch-item input {width:18px;min-height:18px;accent-color:var(--brand);margin-top:2px;}
+.batch-item span {display:grid;gap:4px;}
+.batch-item strong {font-size:13px;}
+.batch-item small {color:var(--muted);font-size:11px;line-height:1.4;}
+.batch-history {margin-top:26px;border-top:1px solid var(--line);padding-top:20px;}
+.batch-history h3 {font-size:14px;margin-bottom:10px;}
+.batch-history-row {display:flex;justify-content:space-between;gap:20px;padding:12px 0;border-bottom:1px solid #edf0f1;font-size:11px;color:var(--muted);}
+.batch-history-row div {display:grid;gap:3px;}
+.batch-history-row strong {color:var(--ink);font-size:12px;}
 .application-choice {
   border:0;
   padding:0;
@@ -1724,14 +1781,14 @@ dialog::backdrop {
   }
   .print-table {
     white-space:normal;
-    table-layout:fixed;
+    table-layout:auto;
   }
   .print-table th,.print-table td {
     border:1px solid #777;
     padding:2.2mm 1.5mm;
     color:#111;
     background:#fff;
-    font-size:7.5pt;
+    font-size:6.8pt;
     vertical-align:top;
     overflow-wrap:anywhere;
   }
@@ -1743,16 +1800,7 @@ dialog::backdrop {
     padding-left:1.5mm;
     text-align:center;
   }
-  .print-table th:nth-child(2) {width:38mm;}
-  .print-table th:nth-child(3) {width:22mm;}
-  .print-table th:nth-child(4) {width:25mm;}
-  .print-table th:nth-child(5) {width:28mm;}
-  .print-table th:nth-child(6) {width:22mm;}
-  .print-table th:nth-child(7) {width:16mm;}
-  .print-table th:nth-child(8) {width:18mm;}
-  .print-table th:nth-child(9) {width:19mm;}
-  .print-table th:nth-child(10) {width:24mm;}
-  .print-table th:nth-child(11) {width:57mm;}
+  .print-table th:nth-child(2),.print-table td:nth-child(2) {min-width:28mm;}
   .print-totals {
     display:flex;
     justify-content:space-between;

@@ -1,9 +1,11 @@
 export const STAGES = [
-  ['recebido', 'Novo pedido'], ['solicitado', 'Na operadora / em análise'],
-  ['agendado', 'Autorizado'], ['realizado', 'Realizado'],
-  ['conferencia', 'Pronto para faturamento'], ['faturamento', 'Entregue ao faturamento'],
+  ['recebido', 'Pedido recebido'], ['solicitado', 'Na operadora / em análise'],
+  ['autorizado', 'Autorizado'], ['agendado', 'Agendado'],
+  ['realizado', 'Realizado · aguardando guia'], ['conferencia', 'Em conferência'],
+  ['pronto_faturamento', 'Pronto para faturamento'], ['faturamento', 'Entregue ao faturamento'],
   ['cancelado', 'Cancelado']
 ];
+export const STAGE_LIMIT_DAYS = Object.freeze({recebido:1,solicitado:3,autorizado:2,realizado:1,conferencia:1,pronto_faturamento:1});
 export const CHECKS = {
   autorizada: 'Guia autorizada', assinada: 'Guia assinada',
   execucao: 'Execução conferida', documentos: 'Documentação conferida'
@@ -31,12 +33,19 @@ export const WORKFLOW_FIELD_LABELS = {
   prontuario:'Prontuário', paciente:'Paciente', convenio:'Convênio', executor:'Médico',
   medicacao:'Medicação', articulacao:'Articulação', lado:'Lado', numeroAplicacao:'Aplicação',
   pedidoRacimed:'Pedido no Racimed', numeroGuia:'Número da guia', dataPedido:'Data do pedido',
-  dataAplicacao:'Data da realização', dataFaturamento:'Data de envio ao faturamento',
+  dataSolicitacao:'Solicitado à operadora', dataAutorizacao:'Data da autorização',
+  dataAgendamento:'Data agendada', dataAplicacao:'Data da realização',
+  dataGuiaRecebida:'Guia recebida pelo setor', dataConferencia:'Conferência concluída',
+  dataFaturamento:'Data de envio ao faturamento', retornoEm:'Próximo acompanhamento',
+  loteReferencia:'Lote de entrega',
   condicaoProcesso:'Condição do processo', observacao:'Detalhes da pendência', atendente:'Responsável'
 };
 export const problem = (status, message) => Object.assign(new Error(message), {status});
 export function localDate(date = new Date()) {
-  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+  return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(date);
+}
+export function addDays(value,days) {
+  const date=new Date(`${value}T12:00:00Z`);date.setUTCDate(date.getUTCDate()+days);return date.toISOString().slice(0,10);
 }
 export function validDate(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -72,8 +81,15 @@ export function validateCaseFields(input,references={convenios:CONVENIOS,medicac
     condicaoProcesso:String(input.condicaoProcesso || (input.pendencia?'outro':'regular')).trim(),
     observacao:String(input.observacao || '').trim(),
     dataPedido:String(input.dataPedido || '').trim(),
+    dataSolicitacao:String(input.dataSolicitacao || '').trim(),
+    dataAutorizacao:String(input.dataAutorizacao || '').trim(),
+    dataAgendamento:String(input.dataAgendamento || '').trim(),
     dataAplicacao:String(input.dataAplicacao || input.data || '').trim(),
+    dataGuiaRecebida:String(input.dataGuiaRecebida || '').trim(),
+    dataConferencia:String(input.dataConferencia || '').trim(),
     dataFaturamento:'',
+    retornoEm:String(input.retornoEm || '').trim(),
+    loteId:'', loteReferencia:'',
     atendente:String(input.atendente || '').trim()
   };
   if(!/^[A-Z0-9./-]{2,30}$/.test(structured.prontuario)) throw problem(400,'Informe o número do prontuário do Racimed.');
@@ -87,7 +103,9 @@ export function validateCaseFields(input,references={convenios:CONVENIOS,medicac
   if(structured.condicaoProcesso==='outro' && !structured.observacao) throw problem(400,'Explique a outra pendência no campo de detalhes.');
   if(structured.pedidoRacimed.length>60 || structured.numeroGuia.length>60 || structured.observacao.length>500 || structured.atendente.length<2 || structured.atendente.length>120) throw problem(400,'Confira os dados da guia e o responsável pelo registro.');
   if(!validDate(structured.dataPedido)) throw problem(400,'Informe a data em que o pedido foi recebido.');
-  if(structured.dataAplicacao && !validDate(structured.dataAplicacao)) throw problem(400,'Informe uma data de realização válida.');
+  for(const [key,label] of [['dataSolicitacao','solicitação'],['dataAutorizacao','autorização'],['dataAgendamento','agendamento'],['dataAplicacao','realização'],['dataGuiaRecebida','recebimento da guia'],['dataConferencia','conferência'],['retornoEm','próximo acompanhamento']]) {
+    if(structured[key] && !validDate(structured[key]))throw problem(400,`Informe uma data de ${label} válida.`);
+  }
   structured.data=structured.dataAplicacao;
   structured.aplicacao=`${structured.numeroAplicacao}ª aplicação · ${structured.articulacao} ${structured.lado.toLowerCase()}`;
   return structured;
@@ -100,6 +118,8 @@ export function updateCaseFields(previous,input,references={convenios:CONVENIOS,
   const condicaoProcesso=String(input.condicaoProcesso ?? fallback).trim();
   const pendencia=condicaoProcesso!=='regular';
   const dataAplicacao=String(input.dataAplicacao ?? input.data ?? previous.dataAplicacao ?? previous.data ?? '').trim();
+  const dataAgendamento=String(input.dataAgendamento ?? previous.dataAgendamento ?? '').trim();
+  const retornoEm=String(input.retornoEm ?? previous.retornoEm ?? '').trim();
   const dataPedido=String(input.dataPedido ?? previous.dataPedido ?? '').trim();
   const pedidoRacimed=String(input.pedidoRacimed ?? previous.pedidoRacimed ?? '').trim();
   const executor=String(input.executor ?? previous.executor ?? '').trim();
@@ -113,12 +133,14 @@ export function updateCaseFields(previous,input,references={convenios:CONVENIOS,
   if(condicaoProcesso==='outro' && !observacao)throw problem(400,'Explique a outra pendência no campo de detalhes.');
   if(observacao.length>500)throw problem(400,'Os detalhes devem ter no máximo 500 caracteres.');
   if(dataAplicacao && !validDate(dataAplicacao))throw problem(400,'Informe uma data de realização válida.');
+  if(dataAgendamento && !validDate(dataAgendamento))throw problem(400,'Informe uma data de agendamento válida.');
+  if(retornoEm && !validDate(retornoEm))throw problem(400,'Informe uma data de acompanhamento válida.');
   if(!validDate(dataPedido))throw problem(400,'Informe a data do pedido.');
   if(pedidoRacimed.length>60 || !references.medicos?.includes(executor) || (medicacao && !references.medicacoes?.includes(medicacao)))throw problem(400,'Confira o pedido, o médico e a medicação.');
   if(!articulacao || articulacao.length>60 || (selectedJoint!=='Outra articulação'&&!ARTICULACOES.includes(articulacao)))throw problem(400,'Confira a articulação.');
   if(!LADOS.includes(lado) || !['1','2','3'].includes(numeroAplicacao))throw problem(400,'Confira o lado e a aplicação.');
   const aplicacao=`${numeroAplicacao}ª aplicação · ${articulacao} ${lado.toLowerCase()}`;
-  return {...previous,numeroGuia,condicaoProcesso,observacao,pendencia,dataPedido,dataAplicacao,data:dataAplicacao,pedidoRacimed,executor,medicacao,articulacao,lado,numeroAplicacao,aplicacao};
+  return {...previous,numeroGuia,condicaoProcesso,observacao,pendencia,dataPedido,dataAgendamento,dataAplicacao,data:dataAplicacao,retornoEm,pedidoRacimed,executor,medicacao,articulacao,lado,numeroAplicacao,aplicacao};
 }
 export function processLabel(fields) {
   const key=fields.condicaoProcesso || (fields.pendencia?'outro':'regular');
@@ -140,6 +162,24 @@ export function nextStage(stage) {
 export function canEdit(record, role) {
   return !['faturamento','cancelado'].includes(record.stage) && ['admin','recepcao'].includes(role);
 }
+export function daysInStage(record,today=localDate()) {
+  const start=(record.stageChangedAt || record.updatedAt || record.createdAt || '').slice(0,10);
+  if(!validDate(start))return 0;
+  return Math.max(0,Math.floor((new Date(`${today}T12:00:00Z`)-new Date(`${start}T12:00:00Z`))/86400000));
+}
+export function attentionState(record,today=localDate()) {
+  if(['faturamento','cancelado'].includes(record.stage))return {key:'encerrado',label:'Encerrado',days:0};
+  if(record.fields.pendencia)return {key:'pendencia',label:processLabel(record.fields),days:daysInStage(record,today)};
+  const reference=record.fields.retornoEm || (record.stage==='agendado'?record.fields.dataAgendamento:'');
+  if(reference && reference<today)return {key:'atrasada',label:`Atrasada há ${Math.max(1,Math.floor((new Date(`${today}T12:00:00Z`)-new Date(`${reference}T12:00:00Z`))/86400000))} dia(s)`,days:daysInStage(record,today)};
+  if(reference===today)return {key:'hoje',label:'Acompanhar hoje',days:daysInStage(record,today)};
+  const days=daysInStage(record,today),limit=STAGE_LIMIT_DAYS[record.stage];
+  if(limit && days>=limit)return {key:'atrasada',label:`Sem avanço há ${days} dia(s)`,days};
+  return {key:'regular',label:reference?`Próxima ação em ${reference.split('-').reverse().join('/')}`:'Dentro do fluxo',days};
+}
+export function nextActionLabel(stage) {
+  return ({recebido:'Enviar à operadora',solicitado:'Registrar autorização',autorizado:'Registrar agendamento',agendado:'Registrar realização',realizado:'Receber guia assinada',conferencia:'Concluir conferência',pronto_faturamento:'Adicionar ao lote de entrega'})[stage] || 'Consultar histórico';
+}
 export function transition(record, input, role, references) {
   if (!Object.hasOwn(ROLES,role)) throw problem(403,'Acesso não autorizado.');
   if (!input || !Number.isInteger(input.version) || input.version !== record.version) throw problem(409,'Este atendimento foi atualizado. Reabra os detalhes antes de alterar.');
@@ -148,7 +188,7 @@ export function transition(record, input, role, references) {
   if (['faturamento','cancelado'].includes(record.stage)) throw problem(409,'Este processo já foi encerrado. O histórico está disponível para consulta.');
   if (advancing && target!=='cancelado' && nextStage(record.stage) !== target) throw problem(400,'Avance uma etapa de cada vez.');
   if (!canEdit(record,role)) throw problem(403,'Esta ação é do setor de autorizações.');
-  const checks = input.checks || record.checks;
+  const checks = {...(input.checks || record.checks)};
   const fields = input.fields ? updateCaseFields(record.fields,input.fields,references) : {...record.fields};
   if (!checks || Object.keys(checks).length !== Object.keys(CHECKS).length || Object.keys(CHECKS).some(key=>typeof checks[key] !== 'boolean')) throw problem(400,'Confira a lista de documentos.');
   if(target==='cancelado') {
@@ -157,13 +197,22 @@ export function transition(record, input, role, references) {
     return {...record,fields,checks:{...checks},stage:target,version:record.version+1};
   }
   if (advancing && fields.pendencia) throw problem(400,'Resolva a pendência antes de avançar esta guia.');
-  if (['agendado','realizado','conferencia','faturamento'].includes(target) && !checks.autorizada) throw problem(400,'Confirme a autorização da guia antes de avançar.');
-  if (['agendado','realizado','conferencia','faturamento'].includes(target) && !fields.numeroGuia) throw problem(400,'Informe o número da guia autorizada antes de avançar.');
-  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  const today=localDate();
+  if(advancing&&target==='solicitado'){fields.dataSolicitacao=fields.dataSolicitacao||today;fields.retornoEm=fields.retornoEm||addDays(today,3);}
+  if(advancing&&target==='autorizado'){checks.autorizada=true;fields.dataAutorizacao=fields.dataAutorizacao||today;fields.retornoEm='';}
+  if (['autorizado','agendado','realizado','conferencia','pronto_faturamento','faturamento'].includes(target) && !checks.autorizada) throw problem(400,'Confirme a autorização da guia antes de avançar.');
+  if (['autorizado','agendado','realizado','conferencia','pronto_faturamento','faturamento'].includes(target) && !fields.numeroGuia) throw problem(400,'Informe o número da guia autorizada antes de avançar.');
+  if(advancing&&target==='agendado'&&!fields.dataAgendamento)throw problem(400,'Informe a data agendada antes de confirmar o agendamento.');
   const dataAplicacao=fields.dataAplicacao || fields.data || '';
   if (advancing && target==='realizado' && (!dataAplicacao || dataAplicacao>today)) throw problem(400,'Informe a data da realização antes de marcar como realizada.');
-  if (['conferencia','faturamento'].includes(target) && Object.values(checks).some(value=>!value)) throw problem(400,'Conclua os quatro itens de conferência antes de deixar a guia pronta para o faturamento.');
-  if(advancing && target==='faturamento')fields.dataFaturamento=today;
+  if(advancing&&target==='realizado')checks.execucao=true;
+  if(advancing&&target==='conferencia'){checks.assinada=true;fields.dataGuiaRecebida=fields.dataGuiaRecebida||today;}
+  if (['pronto_faturamento','faturamento'].includes(target) && Object.values(checks).some(value=>!value)) throw problem(400,'Conclua os quatro itens de conferência antes de deixar a guia pronta para o faturamento.');
+  if(advancing&&target==='pronto_faturamento')fields.dataConferencia=fields.dataConferencia||today;
+  if(advancing && target==='faturamento'){
+    if(!input.deliveryBatchId || !input.deliveryReference)throw problem(400,'Entregue esta guia por um lote de faturamento.');
+    fields.dataFaturamento=today;fields.loteId=input.deliveryBatchId;fields.loteReferencia=input.deliveryReference;
+  }
   return {...record,fields,checks:{...checks}, stage:target, version:record.version+1};
 }
 export function eventLabel(previous, updated) {

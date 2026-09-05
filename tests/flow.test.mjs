@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {transition,emptyChecks,validateFields,validateCaseFields,validDate,jointLabel} from '../assets/domain.js';
+import {transition,emptyChecks,validateFields,validateCaseFields,validDate,jointLabel,attentionState} from '../assets/domain.js';
 import {DemoStore} from '../assets/store.js';
-const fields={prontuario:'AB-102',paciente:'Paciente de teste',convenio:'Particular',medicacao:'',articulacao:'Joelho',lado:'Direito',numeroAplicacao:'1',pedidoRacimed:'RC-1',aplicacao:'1ª aplicação · Joelho direito',numeroGuia:'GUIA-1',pendencia:false,condicaoProcesso:'regular',observacao:'',dataPedido:'2025-12-20',dataAplicacao:'2026-01-01',data:'2026-01-01',executor:'Dr. Exemplo A',atendente:'Autorizações'};
+const fields={prontuario:'AB-102',paciente:'Paciente de teste',convenio:'Particular',medicacao:'',articulacao:'Joelho',lado:'Direito',numeroAplicacao:'1',pedidoRacimed:'RC-1',aplicacao:'1ª aplicação · Joelho direito',numeroGuia:'GUIA-1',pendencia:false,condicaoProcesso:'regular',observacao:'',dataPedido:'2025-12-20',dataAgendamento:'2026-01-01',dataAplicacao:'2026-01-01',data:'2026-01-01',executor:'Dr. Exemplo A',atendente:'Autorizações'};
 const all={autorizada:true,assinada:true,execucao:true,documentos:true};
 const record=(stage='recebido',checks=emptyChecks())=>({fields,stage,checks,version:1});
 const workflowFields={prontuario:'ab-102',paciente:'Paciente de teste',convenio:'Particular',medicacao:'',articulacao:'Joelho',lado:'Direito',numeroAplicacao:'2',pedidoRacimed:'RC-9',condicaoProcesso:'regular',observacao:'',dataPedido:'2025-12-20',dataAplicacao:'2026-01-01',executor:'Dr. Exemplo A',atendente:'Autorizações'};
@@ -31,13 +31,12 @@ test('rejeita campos obrigatórios, enumerações e tamanho inválidos',()=>{
   for(const change of [{paciente:' '},{convenio:'Não existe'},{executor:'Outro'},{medicacao:'Outro'},{aplicacao:'x'.repeat(301)}])assert.throws(()=>validateFields({...fields,...change}),{status:400});
 });
 test('não registra autorização sem confirmação ou número da guia',()=>{
-  assert.throws(()=>transition(record('solicitado'),{version:1,stage:'agendado'},'recepcao'),{status:400});
-  assert.throws(()=>transition({...record('solicitado',{...emptyChecks(),autorizada:true}),fields:{...fields,numeroGuia:''}},{version:1,stage:'agendado'},'recepcao'),{status:400});
+  assert.throws(()=>transition({...record('solicitado'),fields:{...fields,numeroGuia:''}},{version:1,stage:'autorizado'},'recepcao'),{status:400});
 });
 test('não permite pular etapas',()=>assert.throws(()=>transition(record('recebido',all),{version:1,stage:'agendado'},'admin'),{status:400}));
 test('aplicação futura não pode ser marcada como realizada',()=>assert.throws(()=>transition({...record('agendado',all),fields:{...fields,dataAplicacao:'2099-01-01',data:'2099-01-01'}},{version:1,stage:'realizado'},'admin'),{status:400}));
 test('todos os documentos são necessários para deixar a guia pronta',()=>{
-  for(const missing of Object.keys(all))assert.throws(()=>transition(record('realizado',{...all,[missing]:false}),{version:1,stage:'conferencia'},'recepcao'),{status:400});
+  for(const missing of Object.keys(all))assert.throws(()=>transition(record('conferencia',{...all,[missing]:false}),{version:1,stage:'pronto_faturamento'},'recepcao'),{status:400});
 });
 test('uma pendência impede avanço até ser resolvida',()=>{
   const pendingRecord={...record(),fields:{...fields,pendencia:true}};
@@ -55,11 +54,19 @@ test('versão antiga, checklist inválido e caso encerrado são rejeitados',()=>
 });
 test('fluxo completo exige poucos registros do setor e preserva o original',()=>{
   const original=record();let next=transition(original,{version:1,stage:'solicitado'},'recepcao');
-  next=transition(next,{version:2,stage:'agendado',checks:{...emptyChecks(),autorizada:true}},'recepcao');
-  next=transition(next,{version:3,stage:'realizado'},'recepcao');
-  next=transition(next,{version:4,stage:'conferencia',checks:all},'recepcao');
-  next=transition(next,{version:5,stage:'faturamento'},'recepcao');
-  assert.equal(next.version,6);assert.equal(next.stage,'faturamento');assert.equal(validDate(next.fields.dataFaturamento),true);assert.equal(original.version,1);assert.equal(original.checks.autorizada,false);
+  next=transition(next,{version:2,stage:'autorizado'},'recepcao');
+  next=transition(next,{version:3,stage:'agendado'},'recepcao');
+  next=transition(next,{version:4,stage:'realizado'},'recepcao');
+  next=transition(next,{version:5,stage:'conferencia'},'recepcao');
+  next=transition(next,{version:6,stage:'pronto_faturamento',checks:all},'recepcao');
+  next=transition(next,{version:7,stage:'faturamento',deliveryBatchId:'10000000-0000-4000-8000-000000000099',deliveryReference:'AMOT-202601-TESTE'},'recepcao');
+  assert.equal(next.version,8);assert.equal(next.stage,'faturamento');assert.equal(validDate(next.fields.dataFaturamento),true);assert.equal(next.fields.loteReferencia,'AMOT-202601-TESTE');assert.equal(original.version,1);assert.equal(original.checks.autorizada,false);
+});
+test('prioridade identifica retorno vencido, acompanhamento de hoje e pendência',()=>{
+  const base={...record('solicitado'),createdAt:'2026-01-01T10:00:00.000Z',updatedAt:'2026-01-01T10:00:00.000Z',stageChangedAt:'2026-01-01T10:00:00.000Z'};
+  assert.equal(attentionState({...base,fields:{...fields,retornoEm:'2026-01-05'}},'2026-01-10').key,'atrasada');
+  assert.equal(attentionState({...base,fields:{...fields,retornoEm:'2026-01-10'}},'2026-01-10').key,'hoje');
+  assert.equal(attentionState({...base,fields:{...fields,pendencia:true,condicaoProcesso:'falta_carimbo'}},'2026-01-10').key,'pendencia');
 });
 test('demonstração começa vazia, registra histórico e reinicia sem persistir dados',async()=>{
   const demo=new DemoStore();assert.equal((await demo.list()).items.length,0);
@@ -92,4 +99,10 @@ test('perfil é corrigido em todas as guias, mas só a infiltração escolhida �
   assert.equal(changed.fields.articulacao,'Punho');assert.notEqual((await demo.detail(other.id)).fields.articulacao,'Punho');
   await demo.update(target.id,{version:changed.version,stage:'cancelado',checks:changed.checks,fields:{condicaoProcesso:'cancelado',observacao:'Paciente desistiu deste procedimento'}});
   assert.equal((await demo.detail(target.id)).stage,'cancelado');assert.notEqual((await demo.detail(other.id)).stage,'cancelado');
+});
+test('lote da demonstração encerra somente guias prontas do mesmo convênio',async()=>{
+  const demo=new DemoStore(),created=await demo.create({id:crypto.randomUUID(),fields:{...workflowFields,dataAgendamento:'2026-01-01',dataAplicacao:'2026-01-01'}});let current=created;
+  for(const step of [{stage:'solicitado'},{stage:'autorizado',fields:{numeroGuia:'GUIA-LOTE'}},{stage:'agendado'},{stage:'realizado'},{stage:'conferencia'},{stage:'pronto_faturamento',checks:all}])current=await demo.update(current.id,{version:current.version,stage:step.stage,checks:step.checks||current.checks,fields:step.fields});
+  const batch=await demo.createBatch({id:crypto.randomUUID(),caseIds:[current.id],competencia:'2026-01',recebidoPor:'Faturamento teste'});
+  assert.equal(batch.total,1);assert.equal(batch.items[0].stage,'faturamento');assert.match(batch.reference,/^AMOT-202601-/);assert.equal((await demo.listBatches()).items.length,1);
 });

@@ -6,7 +6,7 @@ import {handle} from '../worker/index.mjs';
 import {authenticate} from '../worker/auth.mjs';
 import {Repository,SQL} from '../worker/repository.mjs';
 import {emptyChecks} from '../assets/domain.js';
-const fields={prontuario:'10021',paciente:'Paciente fictício',convenio:'Particular',medicacao:'',articulacao:'Joelho',lado:'Direito',numeroAplicacao:'1',pedidoRacimed:'RC-100',condicaoProcesso:'regular',observacao:'',aplicacao:'1ª aplicação · Joelho direito',dataPedido:'2025-12-20',dataAplicacao:'2026-01-01',data:'2026-01-01',executor:'Dr. Exemplo A',atendente:'Nome enviado pelo navegador'};
+const fields={prontuario:'10021',paciente:'Paciente fictício',convenio:'Particular',medicacao:'',articulacao:'Joelho',lado:'Direito',numeroAplicacao:'1',pedidoRacimed:'RC-100',condicaoProcesso:'regular',observacao:'',aplicacao:'1ª aplicação · Joelho direito',dataPedido:'2025-12-20',dataAgendamento:'2026-01-01',dataAplicacao:'2026-01-01',data:'2026-01-01',executor:'Dr. Exemplo A',atendente:'Nome enviado pelo navegador'};
 const env={FIREBASE_PROJECT_ID:'clinic-test',FIREBASE_WEB_API_KEY:'public-test-config',DB:{},ALLOWED_ORIGINS:'https://clinic.example',STAFF_ROLES:JSON.stringify({'staff-1':'recepcao'}),REFERENCE_DATA:JSON.stringify({convenios:['Particular'],medicacoes:['Medicação Exemplo A'],medicos:['Dr. Exemplo A']})};
 const user={uid:'staff-1',role:'recepcao',name:'Maria Autorizações'};
 const id='10000000-0000-4000-8000-000000000001';
@@ -18,6 +18,7 @@ function fixture() {
   db.exec(readFileSync(new URL('../migrations/0002_sector_workflow.sql',import.meta.url),'utf8'));
   db.exec(readFileSync(new URL('../migrations/0003_patients.sql',import.meta.url),'utf8'));
   db.exec(readFileSync(new URL('../migrations/0004_patient_audit.sql',import.meta.url),'utf8'));
+  db.exec(readFileSync(new URL('../migrations/0005_daily_queue_and_batches.sql',import.meta.url),'utf8'));
   const binding={
     prepare(sql){return {bind(...args){return {sql,args,async first(){return db.prepare(sql).get(...args)||null;},async all(){return {results:db.prepare(sql).all(...args)};}};}}},
     async batch(statements){db.exec('BEGIN');try{const results=statements.map(({sql,args})=>({meta:db.prepare(sql).run(...args)}));db.exec('COMMIT');return results;}catch(error){db.exec('ROLLBACK');throw error;}}
@@ -67,11 +68,14 @@ test('API grava, consulta, confere, encaminha e recebe usando SQL real',async()=
   let response=await handle(request('/cases','POST',{id,fields}),env,deps);assert.equal(response.status,201);
   let record=await response.json();assert.equal(record.events.length,1);assert.equal(record.fields.atendente,'Maria Autorizações');
   const patient=await (await handle(request('/patient?prontuario=10021'),env,deps)).json();assert.deepEqual(patient.patient,{prontuario:'10021',paciente:'Paciente fictício',convenio:'Particular'});
-  for(const [version,stage,checks] of [[1,'solicitado',emptyChecks()],[2,'agendado',{...emptyChecks(),autorizada:true}],[3,'realizado',{...emptyChecks(),autorizada:true}],[4,'conferencia',all],[5,'faturamento',all]]) {
-    response=await handle(request('/cases/'+id,'PATCH',{version,stage,checks,fields:{numeroGuia:'GUIA-100',observacao:'',condicaoProcesso:'regular'}}),env,deps);
+  for(const stage of ['solicitado','autorizado','agendado','realizado','conferencia','pronto_faturamento']) {
+    const checks=stage==='pronto_faturamento'?all:record.checks;
+    response=await handle(request('/cases/'+id,'PATCH',{version:record.version,stage,checks,fields:{numeroGuia:'GUIA-100',dataAgendamento:'2026-01-01',dataAplicacao:'2026-01-01',observacao:'',condicaoProcesso:'regular'}}),env,deps);
     assert.equal(response.status,200);record=await response.json();
   }
-  assert.equal(record.version,6);assert.equal(record.events.length,6);assert.equal(record.stage,'faturamento');assert.equal(record.fields.numeroGuia,'GUIA-100');assert.match(record.fields.dataFaturamento,/^\d{4}-\d{2}-\d{2}$/);
+  const batchId='10000000-0000-4000-8000-000000000099';response=await handle(request('/batches','POST',{id:batchId,caseIds:[id],competencia:'2026-01',recebidoPor:'João Faturamento'}),env,deps);assert.equal(response.status,201);
+  const batch=await response.json();record=await repository.get(id);assert.equal(record.version,8);assert.equal(record.events.length,8);assert.equal(record.stage,'faturamento');assert.equal(record.fields.numeroGuia,'GUIA-100');assert.match(record.fields.dataFaturamento,/^\d{4}-\d{2}-\d{2}$/);assert.equal(record.fields.loteReferencia,batch.reference);
+  const batchList=await (await handle(request('/batches'),env,deps)).json();assert.equal(batchList.items.length,1);assert.equal(batchList.items[0].total,1);
   const list=await (await handle(request('/cases'),env,deps)).json();assert.equal(list.items.length,1);assert.equal(list.items[0].fields.paciente,fields.paciente);db.close();
 });
 test('repetir cadastro com mesmo protocolo não duplica após falha de rede',async()=>{
@@ -80,6 +84,20 @@ test('repetir cadastro com mesmo protocolo não duplica após falha de rede',asy
   assert.equal((await handle(request('/cases','POST',{id,fields}),env,deps)).status,201);
   assert.equal((await repository.list()).items.length,1);assert.equal((await repository.get(id)).events.length,1);
   assert.equal((await handle(request('/cases','POST',{id,fields:{...fields,articulacao:'Ombro',aplicacao:'1ª aplicação · Ombro direito'}}),env,deps)).status,409);db.close();
+});
+test('não abre duas guias ativas para a mesma articulação, lado e aplicação',async()=>{
+  const {db,repository}=fixture(),deps={repository,authenticate:async()=>user};
+  await handle(request('/cases','POST',{id,fields}),env,deps);
+  const secondId='10000000-0000-4000-8000-000000000088';
+  const response=await handle(request('/cases','POST',{id:secondId,fields}),env,deps);
+  assert.equal(response.status,409);assert.match((await response.json()).error,/processo ativo/);assert.equal((await repository.list()).items.length,1);db.close();
+});
+test('cancelamento encerra uma guia e permite um novo processo futuro',async()=>{
+  const {db,repository}=fixture(),deps={repository,authenticate:async()=>user};
+  await handle(request('/cases','POST',{id,fields}),env,deps);
+  let response=await handle(request('/cases/'+id,'PATCH',{version:1,stage:'cancelado',checks:emptyChecks(),fields:{condicaoProcesso:'cancelado',observacao:'Paciente desistiu'}}),env,deps);
+  assert.equal(response.status,200);assert.equal((await response.json()).stage,'cancelado');
+  response=await handle(request('/cases','POST',{id:'10000000-0000-4000-8000-000000000087',fields}),env,deps);assert.equal(response.status,201);db.close();
 });
 test('prontuário mantém um perfil único mesmo se o navegador enviar outro nome',async()=>{
   const {db,repository}=fixture(),deps={repository,authenticate:async()=>user};
@@ -113,7 +131,7 @@ test('paginação cobre 102 registros sem perdas e ordena pelos mais recentes',a
   const {db,repository}=fixture();
   for(let i=0;i<102;i++) {
     const at=new Date(Date.UTC(2026,0,1,0,i)).toISOString();
-    db.prepare(SQL.create).run(crypto.randomUUID(),JSON.stringify(fields),'autorizacao','recebido',JSON.stringify(emptyChecks()),at,at,user.uid);
+    db.prepare(SQL.create).run(crypto.randomUUID(),JSON.stringify(fields),'autorizacao','recebido','recebido',JSON.stringify(emptyChecks()),at,at,at,user.uid);
   }
   const first=await repository.list(),second=await repository.list(first.nextCursor);
   assert.equal(first.items.length,100);assert.equal(second.items.length,2);assert.equal(second.nextCursor,null);

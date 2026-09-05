@@ -1,12 +1,13 @@
-import {STAGES,CHECKS,ROLES,WORKFLOW_FIELD_LABELS,emptyChecks,pending,nextStage,canEdit,localDate,applicationLabel,jointLabel,processLabel} from './domain.js?v=9';
-import {$,node,fillOptions,closeDialogs,summary,displayDate} from './ui.js?v=9';
-import {DemoStore,ApiStore} from './store.js?v=9';
-import {config} from './config.js?v=9';
+import {STAGES,CHECKS,ROLES,WORKFLOW_FIELD_LABELS,emptyChecks,pending,nextStage,canEdit,localDate,applicationLabel,jointLabel,processLabel,attentionState,nextActionLabel} from './domain.js?v=10';
+import {$,node,fillOptions,closeDialogs,summary,displayDate} from './ui.js?v=10';
+import {DemoStore,ApiStore} from './store.js?v=10';
+import {config} from './config.js?v=10';
 fillOptions();closeDialogs();
-let store=new DemoStore(),records=[],reportRecords=[],cursor=null,filter='all',selected=null,epoch=0,busy=false,createId=null,loading=false;
+let store=new DemoStore(),records=[],reportRecords=[],batches=[],cursor=null,filter='all',selected=null,epoch=0,busy=false,createId=null,loading=false,lastBatch=null;
 const configured=Boolean(config.apiUrl && config.firebaseApiKey);
 const status=$('#status'),detail=$('#case-dialog'),newDialog=$('#new-dialog'),newForm=$('#new-case');
 const profileDialog=$('#profile-dialog'),profileForm=$('#profile-form'),processDialog=$('#process-dialog'),processForm=$('#process-form'),cancelDialog=$('#cancel-dialog'),cancelForm=$('#cancel-form');
+const batchDialog=$('#batch-dialog'),batchForm=$('#batch-form');
 const patientActions=node('div',null,'patient-actions');
 const addPatientCaseButton=node('button','＋ Novo pedido deste paciente','button compact');addPatientCaseButton.type='button';
 const editProfileButton=node('button','Editar perfil','text-button');editProfileButton.type='button';
@@ -33,49 +34,47 @@ const stageLabel=stage=>STAGES.find(([key])=>key===stage)?.[1] || 'Situação n�
 const applicationDate=fields=>fields.dataAplicacao || fields.data || '';
 const requestDate=fields=>fields.dataPedido || '';
 const billingDate=fields=>fields.dataFaturamento || '';
-const STALE_DAYS=3;
-const staleDays=record=>['faturamento','cancelado'].includes(record.stage)?0:Math.max(0,Math.floor((Date.now()-new Date(record.updatedAt).getTime())/86400000));
-const isStale=record=>staleDays(record)>=STALE_DAYS;
-const stageHints={all:'Visão geral',pendencia:'Corrigir antes de seguir',sem_atualizacao:'Precisam de acompanhamento',recebido:'Cadastrar e conferir',solicitado:'Aguardar operadora',agendado:'Guia liberada',realizado:'Recolher a guia',conferencia:'Tudo conferido',faturamento:'Entrega registrada',cancelado:'Processo encerrado'};
+const stageHints={all:'Visão geral',pendencia:'Corrigir antes de seguir',atrasada:'Prioridade do setor',hoje:'Retorno ou procedimento',recebido:'Conferir e solicitar',solicitado:'Acompanhar operadora',autorizado:'Providenciar agendamento',agendado:'Aguardar realização',realizado:'Recolher a guia',conferencia:'Conferir documentos',pronto_faturamento:'Incluir em um lote',faturamento:'Entrega registrada',cancelado:'Processo encerrado'};
 function render() {
   const hasRecords=records.length>0;
   $('.status-section').hidden=!hasRecords;$('.toolbar').hidden=!hasRecords;$('.queue-card>.table-scroll').hidden=!hasRecords;$('.workflow-note').hidden=!hasRecords;
   const filters=$('#stage-filters');filters.replaceChildren();
   const groups=[
-    ['Visão rápida','O que exige atenção agora',[['all','Todas'],['pendencia','Com pendência'],['sem_atualizacao',`Paradas ${STALE_DAYS}+ dias`]]],
-    ['Autorizações','Do recebimento até a liberação',STAGES.slice(0,3)],
-    ['Pós-procedimento e faturamento','Da realização até a entrega final',STAGES.slice(3)]
+    ['Prioridades de hoje','Comece por estas filas',[['all','Todas'],['pendencia','Com pendência'],['atrasada','Atrasadas'],['hoje','Para hoje']]],
+    ['Autorizações','Do recebimento ao agendamento',STAGES.slice(0,4)],
+    ['Pós-procedimento','Da realização à entrega',STAGES.slice(4)]
   ];
   for(const [title,hint,items] of groups) {
     const group=node('section',null,'filter-group'),heading=node('div',null,'filter-group-heading'),grid=node('div',null,'filter-grid');
     heading.append(node('h3',title),node('p',hint));group.append(heading,grid);
     for(const [key,label] of items) {
-      const count=key==='all' ? records.length : key==='pendencia' ? records.filter(r=>r.fields.pendencia).length : key==='sem_atualizacao' ? records.filter(isStale).length : records.filter(r=>r.stage===key).length;
+      const count=key==='all' ? records.length : ['pendencia','atrasada','hoje'].includes(key) ? records.filter(r=>attentionState(r).key===key).length : records.filter(r=>r.stage===key).length;
       const button=node('button',null,`filter status-${key}`);button.type='button';button.setAttribute('aria-pressed',String(filter===key));button.append(node('span',label),node('strong',count),node('small',stageHints[key]));
       button.addEventListener('click',()=>{filter=key;render();filters.querySelector('[aria-pressed="true"]')?.focus();});grid.append(button);
     }
     filters.append(group);
   }
   const query=normalize($('#search').value.trim());
-  const visible=records.filter(r=>(filter==='all'||(filter==='pendencia'?r.fields.pendencia:filter==='sem_atualizacao'?isStale(r):r.stage===filter)) && (!$('#only-pending').checked||['realizado','conferencia'].includes(r.stage)) && normalize([r.fields.paciente,r.fields.prontuario,r.fields.numeroGuia,r.fields.convenio,r.fields.articulacao,processLabel(r.fields),r.fields.observacao,r.id].filter(Boolean).join(' ')).includes(query));
+  const visible=records.filter(r=>(filter==='all'||(['pendencia','atrasada','hoje'].includes(filter)?attentionState(r).key===filter:r.stage===filter)) && (!$('#only-pending').checked||r.fields.pendencia) && normalize([r.fields.paciente,r.fields.prontuario,r.fields.numeroGuia,r.fields.pedidoRacimed,r.fields.executor,r.fields.convenio,r.fields.articulacao,r.fields.loteReferencia,processLabel(r.fields),r.fields.observacao,r.id].filter(Boolean).join(' ')).includes(query));
   const tbody=$('#cases');tbody.replaceChildren();
   for(const record of visible) {
     const tr=node('tr'),patient=node('td');patient.append(node('strong',record.fields.paciente),node('small',record.fields.prontuario ? `Prontuário ${record.fields.prontuario}` : record.id.startsWith('demo-')?record.id.toUpperCase():'AM-'+record.id.slice(0,8).toUpperCase()));
     const joint=node('td',jointLabel(record.fields));joint.append(node('small',record.fields.pedidoRacimed ? `Pedido ${record.fields.pedidoRacimed}` : 'Uma guia para esta articulação'));
     const guide=node('td');guide.append(node('strong',record.fields.numeroGuia || 'Número ainda não informado'),node('small',`${applicationLabel(record.fields)} · Pedido ${requestDate(record.fields)?displayDate(requestDate(record.fields)):'sem data'}`),node('small',applicationDate(record.fields)?`Realizada em ${displayDate(applicationDate(record.fields))}`:'Realização ainda não informada'));
-    const stage=node('td');stage.append(node('span',stageLabel(record.stage),'pill '+record.stage));if(record.fields.pendencia)stage.append(node('small',`⚠ ${processLabel(record.fields)}`,'pending-note'));if(isStale(record))stage.append(node('small',`Sem atualização há ${staleDays(record)} dias`,'stale-note'));
+    const attention=attentionState(record),stage=node('td');stage.append(node('span',stageLabel(record.stage),'pill '+record.stage));if(record.fields.pendencia)stage.append(node('small',`⚠ ${processLabel(record.fields)}`,'pending-note'));
+    const nextAction=node('td');nextAction.append(node('strong',nextActionLabel(record.stage)),node('small',attention.label,`attention-note ${attention.key}`));
     const progress=node('td'),bars=node('div',null,'check-progress');bars.setAttribute('aria-hidden','true');
     for(const checked of Object.values(record.checks)) bars.append(node('i',null,checked?'done':''));
     progress.append(bars,node('small',`${4-pending(record).length}/4 itens conferidos`));
     const action=node('td'),button=node('button','Abrir guia →','text-button');button.type='button';button.setAttribute('aria-label',`Abrir guia de ${record.fields.paciente}`);button.addEventListener('click',()=>openCase(record.id));action.append(button);
-    tr.className=`stage-row ${record.stage}${record.fields.pendencia?' has-pending':''}${isStale(record)?' is-stale':''}`;tr.append(patient,joint,guide,node('td',record.fields.convenio),stage,progress,action);tbody.append(tr);
+    tr.className=`stage-row ${record.stage}${record.fields.pendencia?' has-pending':''}${attention.key==='atrasada'?' is-stale':''}`;tr.append(patient,joint,guide,node('td',record.fields.convenio),stage,nextAction,progress,action);tbody.append(tr);
   }
   $('#empty').hidden=visible.length>0;
   $('#empty h3').textContent=hasRecords?'Nenhuma guia encontrada':'Nenhum paciente cadastrado';
   $('#empty p').textContent=hasRecords?'Escolha outra etapa ou limpe a busca.':'Cadastre a primeira guia para começar seus testes.';
   $('#clear-filters').textContent=hasRecords?'Limpar filtros':'＋ Cadastrar primeiro paciente';
   $('#result-count').textContent=`${visible.length} guia${visible.length===1?'':'s'}`;
-  $('#load-more').hidden=!cursor;$('#abrir-novo').disabled=!['recepcao','admin'].includes(store.role);
+  $('#load-more').hidden=!cursor;$('#abrir-novo').disabled=!['recepcao','admin'].includes(store.role);$('#abrir-lotes').disabled=!records.some(record=>record.stage==='pronto_faturamento')||!['recepcao','admin'].includes(store.role);
   $('#list-note').textContent=store instanceof DemoStore ? 'Ambiente de testes: use somente dados fictícios.' : `${records.length} guias carregadas.${cursor?' Há mais registros disponíveis.':''}`;
 }
 async function openCase(id) {
@@ -92,7 +91,7 @@ function renderDetail() {
   $('#case-protocol').textContent=`GUIA ${record.id.startsWith('demo-')?record.id.toUpperCase():record.id.slice(0,8).toUpperCase()} · VERSÃO ${record.version}`;
   $('#case-guide-number').textContent=record.fields.numeroGuia || 'Ainda não informado';
   $('#case-status').textContent=stageLabel(record.stage);$('#case-status').className=`pill ${record.stage}`;
-  $('#case-guide').value=record.fields.numeroGuia || '';$('#case-date').value=applicationDate(record.fields);$('#case-condition').value=record.fields.condicaoProcesso || (record.fields.pendencia?'outro':'regular');$('#case-observation').value=record.fields.observacao || '';
+  $('#case-guide').value=record.fields.numeroGuia || '';$('#case-scheduled-date').value=record.fields.dataAgendamento || '';$('#case-date').value=applicationDate(record.fields);$('#case-followup').value=record.fields.retornoEm || '';$('#case-condition').value=record.fields.condicaoProcesso || (record.fields.pendencia?'outro':'regular');$('#case-observation').value=record.fields.observacao || '';
   summary($('#case-summary'),record.fields,WORKFLOW_FIELD_LABELS);
   $('#case-steps').replaceChildren();
   const current=STAGES.findIndex(([key])=>key===record.stage);
@@ -116,11 +115,11 @@ function renderDetail() {
   editProfileButton.hidden=!['recepcao','admin'].includes(store.role);
   editCaseButton.hidden=!editable;
   cancelCaseButton.hidden=!editable;
-  $('#case-guide').disabled=$('#case-date').disabled=$('#case-condition').disabled=$('#case-observation').disabled=!editable;
+  $('#case-guide').disabled=$('#case-scheduled-date').disabled=$('#case-date').disabled=$('#case-followup').disabled=$('#case-condition').disabled=$('#case-observation').disabled=!editable;
   $('#check-help').textContent=record.stage==='faturamento'?'Entrega registrada. A guia permanece disponível para consulta e impressão.':'Marque somente o que já foi conferido pelo setor.';
   const next=nextStage(record.stage);
   $('#advance').hidden=!next || !editable;
-  $('#advance').textContent=({solicitado:'Solicitação enviada',agendado:'Registrar autorização',realizado:'Marcar como realizado',conferencia:'Deixar pronto para faturamento',faturamento:'Registrar entrega ao faturamento'})[next] || 'Avançar etapa';
+  $('#advance').textContent=nextActionLabel(record.stage);
   $('#case-message').textContent='';$('#case-history').replaceChildren();
   for(const event of [...record.events].reverse()) {
     const item=node('li',event.action),date=new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short'}).format(new Date(event.at));
@@ -131,7 +130,7 @@ async function save(advance=false) {
   if(busy || !selected) return;busy=true;
   const current=store,run=epoch,previous=selected;
   const checks=Object.fromEntries([...$('#case-checks').querySelectorAll('input')].map(i=>[i.name,i.checked]));
-  const fields={numeroGuia:$('#case-guide').value,dataAplicacao:$('#case-date').value,condicaoProcesso:$('#case-condition').value,observacao:$('#case-observation').value};
+  const fields={numeroGuia:$('#case-guide').value,dataAgendamento:$('#case-scheduled-date').value,dataAplicacao:$('#case-date').value,retornoEm:$('#case-followup').value,condicaoProcesso:$('#case-condition').value,observacao:$('#case-observation').value};
   $('#save-checks').disabled=$('#advance').disabled=true;
   try {
     const updated=await current.update(previous.id,{version:previous.version,fields,checks,stage:advance?nextStage(previous.stage):previous.stage});
@@ -141,7 +140,7 @@ async function save(advance=false) {
     if(run===epoch) {if(error.status===401)displayError(error);else $('#case-message').textContent=error.status===409?'Este atendimento mudou. Feche e reabra os detalhes para carregar a versão atual.':error.message || 'Não foi possível salvar. Reabra o atendimento para conferir antes de tentar novamente.';}
   } finally {busy=false;$('#save-checks').disabled=$('#advance').disabled=false;}
 }
-$('#case-form').addEventListener('submit',e=>{e.preventDefault();save();});$('#advance').addEventListener('click',()=>save(true));
+$('#case-form').addEventListener('submit',e=>{e.preventDefault();save();});$('#advance').addEventListener('click',()=>{if(selected?.stage==='pronto_faturamento'){detail.close();openBatches(selected.id);return;}save(true);});
 editProfileButton.addEventListener('click',()=>{
   if(!selected)return;
   profileForm.elements.prontuario.value=selected.fields.prontuario;
@@ -204,7 +203,7 @@ $('#search').addEventListener('input',render);$('#only-pending').addEventListene
 $('#clear-filters').addEventListener('click',()=>{if(records.length===0){openNewCase();return;}filter='all';$('#search').value='';$('#only-pending').checked=false;render();});
 $('#refresh').addEventListener('click',()=>{report('');refresh();});$('#load-more').addEventListener('click',()=>refresh(true));
 function resetDemo() {
-  epoch++;store.clear?.();store=new DemoStore();records=[];reportRecords=[];cursor=null;filter='all';selected=null;busy=false;
+  epoch++;store.clear?.();store=new DemoStore();records=[];reportRecords=[];batches=[];cursor=null;filter='all';selected=null;busy=false;lastBatch=null;
   fillOptions(document,null,true);
   $('#patient-history').replaceChildren();$('#patient-totals').textContent='';$('#report-preview').replaceChildren();$('#print-sheet').replaceChildren();
   $('#search').value='';$('#only-pending').checked=false;$('#demo-controls').hidden=false;
@@ -213,7 +212,7 @@ function resetDemo() {
   render(); loading=false;refresh();
 }
 function signOut() {document.querySelectorAll('dialog[open]').forEach(d=>d.close());newForm.reset();$('#login-form').reset();$('#case-summary').replaceChildren();$('#case-history').replaceChildren();$('#case-title').textContent='';$('#case-checks').replaceChildren();resetDemo();}
-$('#reset-demo').addEventListener('click',()=>{resetDemo();report('Demonstração reiniciada com os exemplos originais.');});
+$('#reset-demo').addEventListener('click',()=>{resetDemo();report('Todos os testes foram apagados. A demonstração está vazia novamente.');});
 newForm.elements.articulacao.addEventListener('change',()=>{
   const other=newForm.elements.articulacao.value==='Outra articulação';
   $('#outra-articulacao').hidden=!other;newForm.elements.articulacaoOutra.required=other;if(!other)newForm.elements.articulacaoOutra.value='';
@@ -284,19 +283,30 @@ function reportFilter(item,type) {
 }
 function reportReferenceDate(item,type) {return type==='delivery'?billingDate(item.fields):requestDate(item.fields);}
 function reportTitle(type) {return {complete:'Movimento completo',delivery:'Relação de entrega ao faturamento',open:'Guias ainda não entregues',pending:'Processos com pendência'}[type];}
-function buildReportGroup(insurer,items,month,type) {
+function reportColumns(type) {
+  if(type==='delivery')return [
+    ['Paciente',item=>item.fields.paciente],['Prontuário',item=>item.fields.prontuario||'—'],['Nº da guia',item=>item.fields.numeroGuia||'—'],['Médico',item=>item.fields.executor],['Articulação',item=>jointLabel(item.fields)],['Aplicação',item=>applicationLabel(item.fields)],['Realização',item=>applicationDate(item.fields)?displayDate(applicationDate(item.fields)):'—'],['Lote',item=>item.fields.loteReferencia||'—']
+  ];
+  if(['open','pending'].includes(type))return [
+    ['Paciente',item=>item.fields.paciente],['Prontuário',item=>item.fields.prontuario||'—'],['Guia',item=>item.fields.numeroGuia||'—'],['Médico',item=>item.fields.executor],['Articulação',item=>jointLabel(item.fields)],['Aplicação',item=>applicationLabel(item.fields)],['Pedido',item=>displayDate(requestDate(item.fields))],['Situação',item=>stageLabel(item.stage)],['Próxima ação',item=>nextActionLabel(item.stage)],['Retorno',item=>item.fields.retornoEm?displayDate(item.fields.retornoEm):'—'],['Pendência / observação',item=>item.fields.pendencia?[processLabel(item.fields),item.fields.observacao].filter(Boolean).join(' — '):'Sem pendência']
+  ];
+  return [
+    ['Paciente',item=>item.fields.paciente],['Prontuário',item=>item.fields.prontuario||'—'],['Guia',item=>item.fields.numeroGuia||'—'],['Médico',item=>item.fields.executor],['Articulação',item=>jointLabel(item.fields)],['Aplicação',item=>applicationLabel(item.fields)],['Pedido',item=>displayDate(requestDate(item.fields))],['Solicitação',item=>item.fields.dataSolicitacao?displayDate(item.fields.dataSolicitacao):'—'],['Autorização',item=>item.fields.dataAutorizacao?displayDate(item.fields.dataAutorizacao):'—'],['Agendada',item=>item.fields.dataAgendamento?displayDate(item.fields.dataAgendamento):'—'],['Realização',item=>applicationDate(item.fields)?displayDate(applicationDate(item.fields)):'—'],['Faturamento',item=>billingDate(item.fields)?displayDate(billingDate(item.fields)):'—'],['Situação',item=>stageLabel(item.stage)]
+  ];
+}
+function buildReportGroup(insurer,items,month,type,batch=null) {
   const section=node('section',null,'print-insurer');
   const header=node('header',null,'print-header'),brand=node('div');brand.append(node('strong','AMOT'),node('span','Gestão de infiltrações'));
-  const title=node('div');title.append(node('h1',reportTitle(type)),node('p',`${monthName(month)} · ${insurer}`));header.append(brand,title);section.append(header);
+  const title=node('div');title.append(node('h1',batch?`Protocolo ${batch.reference}`:reportTitle(type)),node('p',`${monthName(month)} · ${insurer}`));header.append(brand,title);section.append(header);
   const meta=node('div',null,'print-meta');
-  meta.append(node('span',`Convênio: ${insurer}`),node('span',`Referência: ${month.replace('-','')}-${normalize(insurer).replace(/[^a-z0-9]/g,'').slice(0,8).toUpperCase()}`),node('span',`Emitido em: ${new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short'}).format(new Date())}`));section.append(meta);
+  meta.append(node('span',`Convênio: ${insurer}`),node('span',`Referência: ${batch?.reference || `${month.replace('-','')}-${normalize(insurer).replace(/[^a-z0-9]/g,'').slice(0,8).toUpperCase()}`}`),node('span',`Emitido em: ${new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short'}).format(new Date())}`));section.append(meta);
   const table=node('table',null,'print-table'),thead=node('thead'),head=node('tr');
-  for(const label of ['Nº','Paciente','Prontuário','Nº da guia','Médico','Articulação','Lado','Aplicação','Pedido','Realização','Faturamento','Situação','Condição / observação'])head.append(node('th',label));thead.append(head);table.append(thead);
-  const body=node('tbody');items.forEach((item,index)=>{const tr=node('tr');const process=item.fields.pendencia?[processLabel(item.fields),item.fields.observacao].filter(Boolean).join(' — '):'Sem pendência';for(const value of [String(index+1).padStart(2,'0'),item.fields.paciente,item.fields.prontuario||'—',item.fields.numeroGuia||'—',item.fields.executor,item.fields.articulacao||'—',item.fields.lado||'—',item.fields.numeroAplicacao?`${item.fields.numeroAplicacao}ª de 3`:'—',requestDate(item.fields)?displayDate(requestDate(item.fields)):'—',applicationDate(item.fields)?displayDate(applicationDate(item.fields)):'—',billingDate(item.fields)?displayDate(billingDate(item.fields)):'—',stageLabel(item.stage),process])tr.append(node('td',value));body.append(tr);});table.append(body);section.append(table);
+  const columns=reportColumns(type);for(const label of ['Nº',...columns.map(([label])=>label)])head.append(node('th',label));thead.append(head);table.append(thead);
+  const body=node('tbody');items.forEach((item,index)=>{const tr=node('tr');tr.append(node('td',String(index+1).padStart(2,'0')));for(const [,value] of columns)tr.append(node('td',value(item)));body.append(tr);});table.append(body);section.append(table);
   const totals=node('div',null,'print-totals'),joints=new Map();for(const item of items)joints.set(item.fields.articulacao||'Não informada',(joints.get(item.fields.articulacao||'Não informada')||0)+1);
   totals.append(node('strong',`Total: ${items.length} guia${items.length===1?'':'s'}`),node('span',[...joints].map(([joint,count])=>`${joint}: ${count}`).join(' · ')));section.append(totals);
   if(type==='delivery') {
-    const signatures=node('div',null,'print-signatures');for(const label of ['Entregue por','Recebido por / Faturamento','Data e horário','Assinatura']){const field=node('div');field.append(node('span',label));signatures.append(field);}section.append(signatures);
+    const signatures=node('div',null,'print-signatures');for(const label of ['Entregue por',batch?`Recebido por: ${batch.recebidoPor}`:'Recebido por / Faturamento','Data e horário','Assinatura']){const field=node('div');field.append(node('span',label));signatures.append(field);}section.append(signatures);
   }
   const footer=node('footer',`Documento de controle administrativo · Cada articulação corresponde a uma guia.`);section.append(footer);
   return section;
@@ -328,6 +338,50 @@ $('#abrir-relatorios').addEventListener('click',openReports);
 $('#nav-reports').addEventListener('click',event=>{event.preventDefault();openReports();});
 for(const id of ['#report-month','#report-type','#report-insurer'])$(id).addEventListener('change',renderReport);
 $('#print-report').addEventListener('click',()=>{if(!$('#print-sheet').children.length)return;window.print();});
+let batchPreselect='';
+function renderBatchHistory() {
+  const container=$('#batch-history');container.replaceChildren();
+  if(!batches.length){container.append(node('p','Nenhum lote foi entregue ainda.','report-empty'));return;}
+  for(const batch of batches.slice(0,8)){
+    const row=node('div',null,'batch-history-row'),main=node('div');main.append(node('strong',batch.reference),node('span',`${batch.convenio} · ${batch.total} guia${batch.total===1?'':'s'} · ${monthName(batch.competencia)}`));
+    row.append(main,node('span',`Recebido por ${batch.recebidoPor}`));container.append(row);
+  }
+}
+function readyCases() {return records.filter(record=>record.stage==='pronto_faturamento');}
+function renderBatchItems() {
+  const insurer=$('#batch-insurer').value,items=readyCases().filter(record=>record.fields.convenio===insurer),container=$('#batch-items');container.replaceChildren();
+  if(!items.length){container.append(node('p','Não há guias prontas para este convênio.','report-empty'));$('#create-batch').disabled=true;return;}
+  const heading=node('div',null,'batch-items-heading');heading.append(node('strong',`${items.length} guia${items.length===1?'':'s'} pronta${items.length===1?'':'s'}`),node('span','Marque somente o que está sendo entregue agora.'));container.append(heading);
+  for(const record of items){const label=node('label',null,'batch-item'),checkbox=node('input');checkbox.type='checkbox';checkbox.name='caseId';checkbox.value=record.id;checkbox.checked=!batchPreselect||record.id===batchPreselect;const text=node('span');text.append(node('strong',record.fields.paciente),node('small',`${record.fields.prontuario} · ${jointLabel(record.fields)} · ${applicationLabel(record.fields)} · Guia ${record.fields.numeroGuia}`));label.append(checkbox,text);container.append(label);}
+  $('#create-batch').disabled=false;
+}
+async function openBatches(preselect='') {
+  if(busy)return;busy=true;batchPreselect=preselect;$('#abrir-lotes').disabled=true;$('#batch-message').textContent='';$('#print-batch').hidden=true;
+  try {
+    const [all,batchData]=await Promise.all([allCases(),store.listBatches()]);records=[...new Map(all.map(item=>[item.id,item])).values()];batches=batchData.items || [];
+    const ready=readyCases(),insurers=[...new Set(ready.map(record=>record.fields.convenio))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+    $('#batch-insurer').replaceChildren(...insurers.map(insurer=>new Option(insurer,insurer)));
+    if(preselect){const target=ready.find(record=>record.id===preselect);if(target)$('#batch-insurer').value=target.fields.convenio;}
+    $('#batch-month').value=localDate().slice(0,7);batchForm.elements.recebidoPor.value='';batchForm.elements.observacao.value='';renderBatchItems();renderBatchHistory();
+    if(!ready.length)$('#batch-message').textContent='Nenhuma guia está pronta para entrega. Conclua a conferência primeiro.';
+    batchDialog.showModal();
+  }catch(error){displayError(error);}finally{busy=false;$('#abrir-lotes').disabled=false;}
+}
+$('#abrir-lotes').addEventListener('click',()=>openBatches());
+$('#nav-batches').addEventListener('click',event=>{event.preventDefault();openBatches();});
+$('#batch-insurer').addEventListener('change',()=>{batchPreselect='';renderBatchItems();});
+batchForm.addEventListener('change',event=>{if(event.target.name==='caseId')$('#create-batch').disabled=!batchForm.querySelector('input[name="caseId"]:checked');});
+batchForm.addEventListener('submit',async event=>{
+  event.preventDefault();if(busy)return;const ids=[...batchForm.querySelectorAll('input[name="caseId"]:checked')].map(input=>input.value);if(!ids.length){$('#batch-message').textContent='Selecione ao menos uma guia.';return;}
+  busy=true;$('#create-batch').disabled=true;$('#batch-message').textContent='';const current=store,run=epoch;
+  try {
+    const batch=await current.createBatch({id:crypto.randomUUID(),caseIds:ids,competencia:$('#batch-month').value,recebidoPor:batchForm.elements.recebidoPor.value,observacao:batchForm.elements.observacao.value});if(run!==epoch)return;
+    lastBatch=batch;batches=[batch,...batches.filter(item=>item.id!==batch.id)];records=records.map(record=>batch.items.find(item=>item.id===record.id)||record);reportRecords=records;render();renderBatchHistory();batchPreselect='';
+    const sheet=$('#print-sheet');sheet.replaceChildren(buildReportGroup(batch.convenio,batch.items,batch.competencia,'delivery',batch));$('#print-batch').hidden=false;$('#batch-message').textContent=`Lote ${batch.reference} entregue com ${batch.total} guia${batch.total===1?'':'s'}. O protocolo está pronto para impressão.`;renderBatchItems();
+  }catch(error){if(run===epoch)$('#batch-message').textContent=error.message || 'Não foi possível criar o lote. Atualize as guias e tente novamente.';}
+  finally{busy=false;$('#create-batch').disabled=!batchForm.querySelector('input[name="caseId"]:checked');}
+});
+$('#print-batch').addEventListener('click',()=>{if(lastBatch&&$('#print-sheet').children.length)window.print();});
 function openLogin() {
   $('#login-note').textContent=configured?'Entre com a conta autorizada do setor. A sessão permanece somente nesta aba.':'O painel público está em modo demonstração. O acesso do setor depende da configuração do banco e da liberação dos usuários.';
   $('#login-form').hidden=!configured;$('#login-error').textContent='';$('#login-dialog').showModal();

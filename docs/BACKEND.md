@@ -86,12 +86,16 @@ Com registros fictícios e uma conta do setor:
 1. Confirme que uma conta sem UID liberado recebe acesso negado.
 2. Abra uma guia, marque uma pendência e confirme que ela não avança até a correção.
 3. Cadastre outra articulação com o mesmo prontuário e confirme que nome e convênio são recuperados do perfil único.
-4. Registre o envio à operadora. Para autorizar, informe o número da guia e confirme a autorização.
-5. Marque uma aplicação passada como realizada. Tente deixá-la pronta com documentos pendentes; o servidor deve impedir.
-6. Conclua a conferência e registre a entrega; confirme as três datas (pedido, realização e faturamento) na guia e na impressão.
-7. Abra o mesmo registro em duas sessões. Após uma salvar, a outra deve receber conflito e reabrir os detalhes.
-8. No histórico do paciente, use **Novo pedido deste paciente** e confirme que prontuário, nome e convênio são reaproveitados enquanto a nova articulação mantém guia e situação próprias.
-9. Saia do setor e verifique que os dados reais não permanecem na lista ou nos diálogos.
+4. Registre o envio à operadora. Confirme que a data de solicitação e o retorno sugerido foram preenchidos automaticamente.
+5. Para autorizar, informe o número da guia. Para agendar, informe a data do procedimento.
+6. Marque uma aplicação passada como realizada, receba a guia assinada e conclua os quatro itens da conferência.
+7. Tente criar um processo ativo repetido para o mesmo prontuário, articulação, lado e aplicação; o servidor deve recusar.
+8. Deixe duas guias do mesmo convênio prontas, crie um lote e confirme que ambas foram encerradas com a mesma referência.
+9. Tente misturar convênios no mesmo lote; o servidor deve impedir sem entregar nenhuma guia.
+10. Confirme as datas de pedido, solicitação, autorização, agendamento, realização, recebimento, conferência e faturamento no histórico e na impressão.
+11. Abra o mesmo registro em duas sessões. Após uma salvar, a outra deve receber conflito e reabrir os detalhes.
+12. No histórico do paciente, use **Novo pedido deste paciente** e confirme que prontuário, nome e convênio são reaproveitados enquanto a nova articulação mantém guia e situação próprias.
+13. Saia do setor e verifique que os dados reais não permanecem na lista ou nos diálogos.
 
 O schema e os testes não criam pacientes no banco remoto. Defina também quem administra acessos, backups e correções cadastrais. A interface permite corrigir o perfil do paciente e os dados de cada infiltração de forma independente; registros encerrados permanecem no histórico e não são apagados.
 
@@ -110,10 +114,17 @@ Todas as rotas de dados exigem `Authorization: Bearer <ID_TOKEN>` e usuário lib
 | `GET /cases/:id` | Dados, etapa, versão, conferência e histórico |
 | `POST /cases` | Cadastra uma guia; recebe UUID v4 em `id` e os campos operacionais em `fields` |
 | `PATCH /cases/:id` | Recebe `version`, `stage`, `fields` editáveis e `checks`; aplica regras e registra evento |
+| `GET /batches` | Últimos 100 lotes entregues ao faturamento |
+| `GET /batches/:id` | Cabeçalho do lote e suas guias |
+| `POST /batches` | Entrega de 1 a 100 guias prontas do mesmo convênio em uma única transação |
 
-`checks` contém quatro booleanos: `autorizada`, `assinada`, `execucao`, `documentos`. As etapas são `recebido`, `solicitado`, `agendado`, `realizado`, `conferencia` e `faturamento`. Na interface elas aparecem separadas entre autorizações e pós-procedimento. Cada processo guarda `dataPedido`, `dataAplicacao` e `dataFaturamento`; a última é preenchida automaticamente na entrega final.
+`checks` contém quatro booleanos: `autorizada`, `assinada`, `execucao`, `documentos`. As etapas são `recebido`, `solicitado`, `autorizado`, `agendado`, `realizado`, `conferencia`, `pronto_faturamento` e `faturamento`. Na interface elas aparecem separadas entre autorizações e pós-procedimento.
 
-O prontuário é a chave única da tabela `patients`. Joelho direito, joelho esquerdo e ombro direito do mesmo paciente continuam sendo três processos independentes na tabela `cases`, com guias, aplicações e situações próprias. A etapa `cancelado` encerra apenas o processo selecionado, exige motivo e não apaga o histórico.
+Cada processo guarda `dataPedido`, `dataSolicitacao`, `dataAutorizacao`, `dataAgendamento`, `dataAplicacao`, `dataGuiaRecebida`, `dataConferencia`, `dataFaturamento` e `retornoEm`. Datas que correspondem a um clique real do fluxo são registradas automaticamente no servidor; agendamento, realização e próximo retorno são informados pelo setor.
+
+O prontuário é a chave única da tabela `patients`. Joelho direito, joelho esquerdo e ombro direito do mesmo paciente continuam sendo três processos independentes na tabela `cases`, com guias, aplicações e situações próprias. Um processo ativo repetido para a mesma articulação, lado e aplicação é recusado. A etapa `cancelado` encerra apenas o processo selecionado, exige motivo e não apaga o histórico.
+
+`delivery_batches` guarda a referência, competência, convênio, responsável que recebeu e observação. `delivery_batch_items` relaciona as guias. Criação do lote, itens, mudança das guias e eventos de auditoria são enviados em um único `DB.batch`; uma condição de versão ou etapa inválida aborta a entrega inteira.
 
 Reenviar um cadastro com o mesmo UUID, mesmos campos e mesmo usuário retorna o registro existente. Conflitos de versão retornam `409`. Atualização e evento são gravados juntos; uma falha no lote desfaz ambos. Não há repetição automática de mutações após falha de rede.
 

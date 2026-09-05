@@ -1,4 +1,4 @@
-import {problem,validateCaseFields,emptyChecks,transition,ROLES} from '../assets/domain.js';
+import {problem,validateCaseFields,emptyChecks,transition,ROLES,localDate} from '../assets/domain.js';
 import {authenticate} from './auth.mjs';
 import {Repository} from './repository.mjs';
 import {parseReferences} from './references.mjs';
@@ -18,8 +18,8 @@ export async function handle(request,env,dependencies={}) {
   if(origin)headers['Access-Control-Allow-Origin']=origin;
   if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{...headers,'Access-Control-Allow-Methods':'GET, POST, PATCH, OPTIONS','Access-Control-Allow-Headers':'Authorization, Content-Type','Access-Control-Max-Age':'600'}});
   try {
-    const url=new URL(request.url),match=/^\/cases\/([\da-f-]+)$/i.exec(url.pathname);
-    if(!['/session','/references','/patient','/cases'].includes(url.pathname) && !match)throw problem(404,'Rota não encontrada.');
+    const url=new URL(request.url),match=/^\/cases\/([\da-f-]+)$/i.exec(url.pathname),batchMatch=/^\/batches\/([\da-f-]+)$/i.exec(url.pathname);
+    if(!['/session','/references','/patient','/cases','/batches'].includes(url.pathname) && !match && !batchMatch)throw problem(404,'Rota não encontrada.');
     if(!env.FIREBASE_PROJECT_ID || !env.FIREBASE_WEB_API_KEY || !env.DB)throw problem(503,'O painel da equipe ainda precisa ser configurado.');
     const token=/^Bearer (\S+)$/.exec(request.headers.get('Authorization') || '')?.[1];
     if(!token || token.length>8192)throw problem(401,'Entre com sua conta da equipe.');
@@ -49,6 +49,9 @@ export async function handle(request,env,dependencies={}) {
     }
     if(match && !uuid.test(match[1]))throw problem(400,'Protocolo inválido.');
     if(match && request.method==='GET')return reply(200,await repository.get(match[1]));
+    if(batchMatch && !uuid.test(batchMatch[1]))throw problem(400,'Lote inválido.');
+    if(batchMatch && request.method==='GET')return reply(200,await repository.getBatch(batchMatch[1]));
+    if(url.pathname==='/batches' && request.method==='GET')return reply(200,await repository.listBatches());
     if(url.pathname==='/cases' && request.method==='POST') {
       if(!['admin','recepcao'].includes(user.role))throw problem(403,'A abertura de guias é feita pelo setor de autorizações.');
       const input=await readJson(request);
@@ -56,14 +59,28 @@ export async function handle(request,env,dependencies={}) {
       let fields=validateCaseFields({...input.fields,atendente:user.name || ROLES[user.role]},parseReferences(env.REFERENCE_DATA));
       const patient=await repository.patient(fields.prontuario);
       if(patient)fields={...fields,paciente:patient.paciente,convenio:patient.convenio};
+      const duplicate=(await repository.patientCases(fields.prontuario)).find(record=>record.id!==input.id&&record.fields.articulacao===fields.articulacao&&record.fields.lado===fields.lado&&record.fields.numeroAplicacao===fields.numeroAplicacao);
+      if(duplicate)throw problem(409,'Já existe um processo ativo para esta articulação, lado e aplicação. Abra a guia existente para atualizá-la.');
       const at=new Date().toISOString();
       return reply(201,await repository.create({id:input.id,fields,stage:'recebido',checks:emptyChecks(),version:1,createdAt:at,updatedAt:at},user));
     }
     if(match && request.method==='PATCH') {
       const input=await readJson(request),previous=await repository.get(match[1]);
       const updated=transition(previous,input,user.role,parseReferences(env.REFERENCE_DATA));
-      updated.updatedAt=new Date().toISOString();
+      updated.updatedAt=new Date().toISOString();updated.stageChangedAt=updated.stage===previous.stage?previous.stageChangedAt:updated.updatedAt;
       return reply(200,await repository.update(previous,updated,user));
+    }
+    if(url.pathname==='/batches' && request.method==='POST') {
+      if(!['admin','recepcao'].includes(user.role))throw problem(403,'A entrega ao faturamento é feita pelo setor de autorizações.');
+      const input=await readJson(request),ids=[...new Set(Array.isArray(input.caseIds)?input.caseIds:[])];
+      const recebidoPor=String(input.recebidoPor || '').trim(),observacao=String(input.observacao || '').trim(),competencia=String(input.competencia || '').trim();
+      if(!uuid.test(input.id || '') || !/^\d{4}-\d{2}$/.test(competencia) || ids.length<1 || ids.length>100 || ids.some(id=>!uuid.test(id)) || recebidoPor.length<2 || recebidoPor.length>120 || observacao.length>500)throw problem(400,'Confira as guias, a competência e quem recebeu o lote.');
+      const previous=await Promise.all(ids.map(id=>repository.get(id)));
+      if(previous.some(record=>record.stage!=='pronto_faturamento'))throw problem(409,'Uma das guias não está mais pronta para faturamento. Atualize a lista.');
+      const convenio=previous[0].fields.convenio;if(previous.some(record=>record.fields.convenio!==convenio))throw problem(400,'Cada lote deve conter apenas um convênio.');
+      const at=new Date().toISOString(),reference=`AMOT-${competencia.replace('-','')}-${input.id.slice(0,6).toUpperCase()}`;
+      const updates=previous.map(record=>{const updated=transition(record,{version:record.version,stage:'faturamento',checks:record.checks,deliveryBatchId:input.id,deliveryReference:reference},user.role,parseReferences(env.REFERENCE_DATA));updated.updatedAt=at;updated.stageChangedAt=at;return {previous:record,updated};});
+      return reply(201,await repository.createBatch({id:input.id,reference,competencia,convenio,recebidoPor,observacao,createdAt:at,dataEntrega:localDate(new Date(at))},updates,user));
     }
     throw problem(405,'Método não permitido nesta rota.');
   } catch(error) {

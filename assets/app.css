@@ -1112,8 +1112,12 @@ dialog::backdrop {
 .patient-overview>div:first-child {
   padding:18px 20px;
   background:#f7f9f9;
+  display:flex;
+  align-items:center;
+  gap:16px;
 }
-.patient-overview .text-button {margin-left:auto;}
+.patient-overview .patient-actions {margin-left:auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end;}
+.patient-overview .text-button {margin-left:0;}
 .patient-overview td:last-child .text-button {display:block;margin:7px 0 0;}
 #profile-form,#process-form,#cancel-form {display:grid;gap:18px;}
 .patient-overview h3 {
@@ -1126,6 +1130,10 @@ dialog::backdrop {
 }
 .patient-overview th,.patient-overview td {
   padding:11px 16px;
+}
+@media (max-width:700px) {
+  .patient-overview>div:first-child {align-items:flex-start;flex-direction:column;}
+  .patient-overview .patient-actions {margin-left:0;width:100%;justify-content:flex-start;}
 }
 .report-controls {
   display:grid;

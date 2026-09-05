@@ -1,13 +1,16 @@
-import {STAGES,CHECKS,ROLES,WORKFLOW_FIELD_LABELS,emptyChecks,pending,nextStage,canEdit,localDate,applicationLabel,jointLabel,processLabel} from './domain.js?v=7';
-import {$,node,fillOptions,closeDialogs,summary,displayDate} from './ui.js?v=7';
-import {DemoStore,ApiStore} from './store.js?v=7';
-import {config} from './config.js?v=7';
+import {STAGES,CHECKS,ROLES,WORKFLOW_FIELD_LABELS,emptyChecks,pending,nextStage,canEdit,localDate,applicationLabel,jointLabel,processLabel} from './domain.js?v=8';
+import {$,node,fillOptions,closeDialogs,summary,displayDate} from './ui.js?v=8';
+import {DemoStore,ApiStore} from './store.js?v=8';
+import {config} from './config.js?v=8';
 fillOptions();closeDialogs();
 let store=new DemoStore(),records=[],reportRecords=[],cursor=null,filter='all',selected=null,epoch=0,busy=false,createId=null,loading=false;
 const configured=Boolean(config.apiUrl && config.firebaseApiKey);
 const status=$('#status'),detail=$('#case-dialog'),newDialog=$('#new-dialog'),newForm=$('#new-case');
 const profileDialog=$('#profile-dialog'),profileForm=$('#profile-form'),processDialog=$('#process-dialog'),processForm=$('#process-form'),cancelDialog=$('#cancel-dialog'),cancelForm=$('#cancel-form');
-const editProfileButton=node('button','Editar perfil','text-button');editProfileButton.type='button';$('.patient-overview>div:first-child').append(editProfileButton);
+const patientActions=node('div',null,'patient-actions');
+const addPatientCaseButton=node('button','＋ Novo pedido deste paciente','button compact');addPatientCaseButton.type='button';
+const editProfileButton=node('button','Editar perfil','text-button');editProfileButton.type='button';
+patientActions.append(addPatientCaseButton,editProfileButton);$('.patient-overview>div:first-child').append(patientActions);
 const editCaseButton=node('button','Corrigir dados desta infiltração','button secondary');editCaseButton.type='button';$('#advance').before(editCaseButton);
 const cancelCaseButton=node('button','Cancelar esta infiltração','button secondary danger-outline');cancelCaseButton.type='button';$('#advance').before(cancelCaseButton);
 function report(message) {status.textContent=message;}
@@ -103,6 +106,7 @@ function renderDetail() {
     const item=node('label',null,'check-item'),input=node('input');input.type='checkbox';input.name=key;input.checked=record.checks[key];input.disabled=!editable;item.append(input,node('span',label));checks.append(item);
   }
   $('#save-checks').hidden=!editable;
+  addPatientCaseButton.hidden=!['recepcao','admin'].includes(store.role);
   editProfileButton.hidden=!['recepcao','admin'].includes(store.role);
   editCaseButton.hidden=!editable;
   cancelCaseButton.hidden=!editable;
@@ -208,13 +212,24 @@ newForm.elements.articulacao.addEventListener('change',()=>{
   const other=newForm.elements.articulacao.value==='Outra articulação';
   $('#outra-articulacao').hidden=!other;newForm.elements.articulacaoOutra.required=other;if(!other)newForm.elements.articulacaoOutra.value='';
 });
-function openNewCase() {
+function openNewCase(patient=null) {
   newForm.reset();$('#patient-match').textContent='';
   newForm.elements.dataPedido.value=localDate();
+  if(patient) {
+    newForm.elements.prontuario.value=patient.prontuario || '';
+    newForm.elements.paciente.value=patient.paciente || '';
+    newForm.elements.convenio.value=patient.convenio || '';
+    $('#patient-match').textContent='Paciente já identificado. Preencha apenas os dados do novo pedido e da articulação.';
+  }
   createId=crypto.randomUUID();$('#new-error').textContent='';$('#new-notice').textContent=store instanceof DemoStore?'Teste somente com dados fictícios. O cadastro aparecerá no painel, mas será apagado ao atualizar a página.':'Ao confirmar, a guia será salva na base protegida e o responsável será identificado automaticamente pelo login.';newDialog.showModal();
 }
 $('#abrir-novo').addEventListener('click',openNewCase);
 $('#nav-new').addEventListener('click',event=>{event.preventDefault();openNewCase();});
+addPatientCaseButton.addEventListener('click',()=>{
+  if(!selected)return;
+  const patient={prontuario:selected.fields.prontuario,paciente:selected.fields.paciente,convenio:selected.fields.convenio};
+  detail.close();openNewCase(patient);
+});
 newForm.addEventListener('submit',async e=>{
   e.preventDefault();if(busy)return;
   const current=store,run=epoch;busy=true;$('#create-case').disabled=true;$('#new-error').textContent='';

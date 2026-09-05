@@ -36,6 +36,7 @@ A demonstração é interativa, mas não grava dados em servidores ou no armazen
 | Condição do processo | Pedido para corrigir, ressonância aguardando envio, falta de carimbo/assinatura, laudo aguardando, divergência ou outra pendência |
 | Responsabilidade | O setor de autorizações mantém o controle; recepção e faturamento recebem as relações impressas |
 | Histórico | Todas as articulações e aplicações aparecem no perfil do paciente, mas cada guia mantém processo e situação próprios |
+| Novo pedido do paciente | O perfil oferece um atalho que reaproveita prontuário, nome e convênio e pede somente os dados da nova articulação |
 | Correções | Nome e convênio podem ser corrigidos no perfil e são atualizados em todas as guias do prontuário |
 | Cancelamento | Encerra somente a infiltração escolhida, exige motivo e preserva as demais articulações e o histórico |
 | Fechamento mensal | Movimento completo, pendências ou entrega; folhas A4 separadas por convênio com campos de assinatura |

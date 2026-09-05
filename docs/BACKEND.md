@@ -90,9 +90,10 @@ Com registros fictícios e uma conta do setor:
 5. Marque uma aplicação passada como realizada. Tente deixá-la pronta com documentos pendentes; o servidor deve impedir.
 6. Conclua a conferência e registre a entrega; confirme as três datas (pedido, realização e faturamento) na guia e na impressão.
 7. Abra o mesmo registro em duas sessões. Após uma salvar, a outra deve receber conflito e reabrir os detalhes.
-8. Saia do setor e verifique que os dados reais não permanecem na lista ou nos diálogos.
+8. No histórico do paciente, use **Novo pedido deste paciente** e confirme que prontuário, nome e convênio são reaproveitados enquanto a nova articulação mantém guia e situação próprias.
+9. Saia do setor e verifique que os dados reais não permanecem na lista ou nos diálogos.
 
-O schema e os testes não criam pacientes no banco remoto. Defina também quem administra acessos, backups e correções cadastrais. A versão atual não permite excluir registros nem corrigir os sete dados cadastrais pela interface; essa limitação deve ser considerada antes de utilizá-la na rotina.
+O schema e os testes não criam pacientes no banco remoto. Defina também quem administra acessos, backups e correções cadastrais. A interface permite corrigir o perfil do paciente e os dados de cada infiltração de forma independente; registros encerrados permanecem no histórico e não são apagados.
 
 ## API
 

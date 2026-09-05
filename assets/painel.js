@@ -1,7 +1,7 @@
-import {STAGES,CHECKS,ROLES,WORKFLOW_FIELD_LABELS,emptyChecks,pending,nextStage,canEdit,localDate,applicationLabel,jointLabel,processLabel} from './domain.js?v=8';
-import {$,node,fillOptions,closeDialogs,summary,displayDate} from './ui.js?v=8';
-import {DemoStore,ApiStore} from './store.js?v=8';
-import {config} from './config.js?v=8';
+import {STAGES,CHECKS,ROLES,WORKFLOW_FIELD_LABELS,emptyChecks,pending,nextStage,canEdit,localDate,applicationLabel,jointLabel,processLabel} from './domain.js?v=9';
+import {$,node,fillOptions,closeDialogs,summary,displayDate} from './ui.js?v=9';
+import {DemoStore,ApiStore} from './store.js?v=9';
+import {config} from './config.js?v=9';
 fillOptions();closeDialogs();
 let store=new DemoStore(),records=[],reportRecords=[],cursor=null,filter='all',selected=null,epoch=0,busy=false,createId=null,loading=false;
 const configured=Boolean(config.apiUrl && config.firebaseApiKey);
@@ -38,6 +38,8 @@ const staleDays=record=>['faturamento','cancelado'].includes(record.stage)?0:Mat
 const isStale=record=>staleDays(record)>=STALE_DAYS;
 const stageHints={all:'Visão geral',pendencia:'Corrigir antes de seguir',sem_atualizacao:'Precisam de acompanhamento',recebido:'Cadastrar e conferir',solicitado:'Aguardar operadora',agendado:'Guia liberada',realizado:'Recolher a guia',conferencia:'Tudo conferido',faturamento:'Entrega registrada',cancelado:'Processo encerrado'};
 function render() {
+  const hasRecords=records.length>0;
+  $('.status-section').hidden=!hasRecords;$('.toolbar').hidden=!hasRecords;$('.queue-card>.table-scroll').hidden=!hasRecords;$('.workflow-note').hidden=!hasRecords;
   const filters=$('#stage-filters');filters.replaceChildren();
   const groups=[
     ['Visão rápida','O que exige atenção agora',[['all','Todas'],['pendencia','Com pendência'],['sem_atualizacao',`Paradas ${STALE_DAYS}+ dias`]]],
@@ -68,9 +70,13 @@ function render() {
     const action=node('td'),button=node('button','Abrir guia →','text-button');button.type='button';button.setAttribute('aria-label',`Abrir guia de ${record.fields.paciente}`);button.addEventListener('click',()=>openCase(record.id));action.append(button);
     tr.className=`stage-row ${record.stage}${record.fields.pendencia?' has-pending':''}${isStale(record)?' is-stale':''}`;tr.append(patient,joint,guide,node('td',record.fields.convenio),stage,progress,action);tbody.append(tr);
   }
-  $('#empty').hidden=visible.length>0;$('#result-count').textContent=`${visible.length} guia${visible.length===1?'':'s'}`;
+  $('#empty').hidden=visible.length>0;
+  $('#empty h3').textContent=hasRecords?'Nenhuma guia encontrada':'Nenhum paciente cadastrado';
+  $('#empty p').textContent=hasRecords?'Escolha outra etapa ou limpe a busca.':'Cadastre a primeira guia para começar seus testes.';
+  $('#clear-filters').textContent=hasRecords?'Limpar filtros':'＋ Cadastrar primeiro paciente';
+  $('#result-count').textContent=`${visible.length} guia${visible.length===1?'':'s'}`;
   $('#load-more').hidden=!cursor;$('#abrir-novo').disabled=!['recepcao','admin'].includes(store.role);
-  $('#list-note').textContent=store instanceof DemoStore ? 'Somente dados fictícios nesta demonstração.' : `${records.length} guias carregadas.${cursor?' Há mais registros disponíveis.':''}`;
+  $('#list-note').textContent=store instanceof DemoStore ? 'Ambiente de testes: use somente dados fictícios.' : `${records.length} guias carregadas.${cursor?' Há mais registros disponíveis.':''}`;
 }
 async function openCase(id) {
   if(busy) return;const current=store,run=epoch;busy=true;
@@ -195,14 +201,14 @@ cancelForm.addEventListener('submit',async event=>{
 detail.addEventListener('cancel',e=>{if(busy)e.preventDefault();});
 detail.querySelector('[data-close]').addEventListener('click',()=>{selected=null;});
 $('#search').addEventListener('input',render);$('#only-pending').addEventListener('change',render);
-$('#clear-filters').addEventListener('click',()=>{filter='all';$('#search').value='';$('#only-pending').checked=false;render();});
+$('#clear-filters').addEventListener('click',()=>{if(records.length===0){openNewCase();return;}filter='all';$('#search').value='';$('#only-pending').checked=false;render();});
 $('#refresh').addEventListener('click',()=>{report('');refresh();});$('#load-more').addEventListener('click',()=>refresh(true));
 function resetDemo() {
   epoch++;store.clear?.();store=new DemoStore();records=[];reportRecords=[];cursor=null;filter='all';selected=null;busy=false;
   fillOptions(document,null,true);
   $('#patient-history').replaceChildren();$('#patient-totals').textContent='';$('#report-preview').replaceChildren();$('#print-sheet').replaceChildren();
   $('#search').value='';$('#only-pending').checked=false;$('#demo-controls').hidden=false;
-  $('#mode-banner').replaceChildren(node('span','Demonstração interativa · Dados fictícios. As alterações ficam só nesta aba.'));
+  $('#mode-banner').replaceChildren(node('span','Ambiente de testes · A base começa vazia e as alterações ficam somente nesta aba.'));
   const login=node('button','Acesso do setor →','text-button');login.type='button';login.addEventListener('click',openLogin);$('#mode-banner').append(login);
   render(); loading=false;refresh();
 }
@@ -221,7 +227,7 @@ function openNewCase(patient=null) {
     newForm.elements.convenio.value=patient.convenio || '';
     $('#patient-match').textContent='Paciente já identificado. Preencha apenas os dados do novo pedido e da articulação.';
   }
-  createId=crypto.randomUUID();$('#new-error').textContent='';$('#new-notice').textContent=store instanceof DemoStore?'Teste somente com dados fictícios. O cadastro aparecerá no painel, mas será apagado ao atualizar a página.':'Ao confirmar, a guia será salva na base protegida e o responsável será identificado automaticamente pelo login.';newDialog.showModal();
+  createId=crypto.randomUUID();$('#new-error').textContent='';$('#new-notice').textContent=store instanceof DemoStore?'Use somente dados fictícios. O cadastro aparecerá no painel e será apagado quando a página for atualizada.':'Ao confirmar, a guia será salva na base protegida e o responsável será identificado automaticamente pelo login.';newDialog.showModal();
 }
 $('#abrir-novo').addEventListener('click',openNewCase);
 $('#nav-new').addEventListener('click',event=>{event.preventDefault();openNewCase();});

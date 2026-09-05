@@ -1,12 +1,12 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;550;600;650;700&family=Manrope:wght@500;600;650;700;750;800&display=swap');
 :root {
-  --ink:#172a32;
-  --muted:#5e6d73;
-  --line:#dfe5e6;
-  --paper:#f4f6f6;
+  --ink:#202a33;
+  --muted:#63717c;
+  --line:#e2e7eb;
+  --paper:#f7f9fb;
   --brand:#a72435;
-  --brand-hover:#871d2b;
-  --nav:#142a33;
+  --brand-hover:#881d2b;
+  --nav:#ffffff;
   --green:#25664f;
   --radius:14px;
   font-family:'DM Sans',system-ui,sans-serif;
@@ -20,6 +20,7 @@
 }
 body {
   margin:0;
+  background:var(--paper);
 }
 button,input,select,textarea {
   font:inherit;
@@ -129,10 +130,12 @@ fieldset {
   position:fixed;
   inset:0 auto 0 0;
   background:var(--nav);
-  color:#e7eff0;
+  color:var(--ink);
   display:flex;
   flex-direction:column;
   padding:32px 16px 24px;
+  border-right:1px solid var(--line);
+  box-shadow:4px 0 18px #22313c08;
 }
 .brand {
   display:flex;
@@ -151,7 +154,7 @@ fieldset {
   font-size:11px;
   font-weight:450;
   letter-spacing:.3px;
-  color:#adbec5;
+  color:var(--muted);
   margin-top:3px;
 }
 .brand-mark {
@@ -172,7 +175,7 @@ fieldset {
   right:6px;
 }
 .nav-label {
-  color:#a5b8bf;
+  color:#87939d;
   font-size:10px;
   letter-spacing:1.5px;
   margin:0 14px 15px;
@@ -187,8 +190,9 @@ fieldset {
   gap:12px;
   border-radius:8px;
   padding:13px 14px;
-  color:#becdd2;
+  color:#586772;
   font-size:14px;
+  font-weight:600;
 }
 .sidebar nav a>span {
   font-size:22px;
@@ -196,13 +200,13 @@ fieldset {
   text-align:center;
 }
 .sidebar nav a:hover {
-  background:#ffffff08;
-  color:#fff;
+  background:#f4f6f8;
+  color:var(--ink);
 }
 .sidebar nav a[aria-current] {
-  background:#ffffff10;
-  color:#fff;
-  box-shadow:inset 3px 0 #e87886;
+  background:#fff1f3;
+  color:var(--brand);
+  box-shadow:inset 3px 0 var(--brand);
 }
 .sidebar-note {
   margin:auto 10px 30px;
@@ -237,7 +241,7 @@ fieldset {
   min-width:0;
 }
 .topbar {
-  height:76px;
+  height:66px;
   display:flex;
   justify-content:space-between;
   align-items:center;
@@ -263,14 +267,14 @@ fieldset {
 main {
   max-width:1500px;
   margin:auto;
-  padding:36px 40px 50px;
+  padding:32px 40px 50px;
 }
 .page-heading {
   display:flex;
   align-items:center;
   justify-content:space-between;
   gap:24px;
-  margin-bottom:32px;
+  margin-bottom:24px;
 }
 .eyebrow {
   font-size:11px;
@@ -341,6 +345,7 @@ main {
   border:1px solid var(--line);
   border-radius:var(--radius);
   overflow:hidden;
+  box-shadow:0 8px 26px #1f2f3a08;
 }
 .card-heading {
   display:flex;
@@ -574,15 +579,15 @@ footer a {
   text-underline-offset:3px;
 }
 .demo-banner {
-  background:#eaf0f2;
-  border:1px solid #d6e2e7;
+  background:#fff;
+  border:1px solid var(--line);
   border-radius:8px;
   display:flex;
   justify-content:space-between;
   align-items:center;
   gap:16px;
   font-size:12px;
-  color:#466371;
+  color:#56656f;
   padding:10px 17px;
   margin-bottom:28px;
   line-height:1.6;
@@ -654,7 +659,8 @@ footer a {
   padding:16px;
   border:1px solid var(--line);
   border-radius:12px;
-  background:#f8faf9;
+  background:#fff;
+  box-shadow:0 5px 18px #1f2f3a06;
 }
 .filter-group-heading {margin-bottom:12px;}
 .filter-group-heading h3 {font-size:14px;margin:0 0 3px;}
@@ -703,7 +709,7 @@ footer a {
   display:grid;
   gap:6px;
   align-content:start;
-  min-height:112px;
+  min-height:104px;
   background:white;
   border:1px solid var(--line);
   border-top:5px solid #73858b;
@@ -715,8 +721,8 @@ footer a {
   min-width:125px;
 }
 .filter[aria-pressed=true] {
-  box-shadow:0 0 0 3px #172a3220;
-  transform:translateY(-2px);
+  box-shadow:0 0 0 3px #a7243517;
+  border-color:#d7b6bc;
 }
 .filter strong {
   font-family:Manrope,sans-serif;
@@ -789,7 +795,7 @@ table {
   white-space:nowrap;
 }
 th {
-  font-size:10px;
+  font-size:12px;
   font-weight:600;
   letter-spacing:.5px;
   color:#526872;
@@ -803,12 +809,12 @@ th:first-child,td:first-child {
 }
 td {
   padding:18px 20px;
-  font-size:12px;
+  font-size:14px;
   border-bottom:1px solid #edf0f1;
 }
 td strong {
   display:block;
-  font-size:13px;
+  font-size:14px;
   font-weight:600;
   max-width:220px;
   overflow:hidden;
@@ -817,7 +823,7 @@ td strong {
 td small {
   display:block;
   color:var(--muted);
-  font-size:10px;
+  font-size:12px;
   margin-top:6px;
 }
 tbody tr:hover {
@@ -907,11 +913,19 @@ td .text-button {
 }
 .empty {
   text-align:center;
-  padding:40px 20px;
+  padding:64px 20px;
+  border-top:1px solid var(--line);
 }
 .empty>span {
-  font-size:32px;
-  color:#69828a;
+  width:52px;
+  height:52px;
+  display:grid;
+  place-items:center;
+  margin:0 auto;
+  border-radius:50%;
+  background:#fff1f3;
+  color:var(--brand);
+  font-size:28px;
 }
 .empty h3 {
   margin:12px 0 8px;
@@ -919,7 +933,7 @@ td .text-button {
 .empty p {
   color:var(--muted);
   font-size:14px;
-  margin-bottom:18px;
+  margin-bottom:22px;
 }
 .workflow-note {
   display:flex;

@@ -61,11 +61,12 @@ test('fluxo completo exige poucos registros do setor e preserva o original',()=>
   next=transition(next,{version:5,stage:'faturamento'},'recepcao');
   assert.equal(next.version,6);assert.equal(next.stage,'faturamento');assert.equal(validDate(next.fields.dataFaturamento),true);assert.equal(original.version,1);assert.equal(original.checks.autorizada,false);
 });
-test('demonstração registra histórico e reinicia sem persistir dados',async()=>{
-  const demo=new DemoStore(),item=(await demo.list()).items.find(r=>r.stage==='conferencia');
-  const updated=await demo.update(item.id,{version:1,stage:'faturamento'});
-  assert.equal(updated.events.length,2);assert.match(updated.events.at(-1).action,/faturamento/);
-  assert.equal((await new DemoStore().detail(item.id)).stage,'conferencia');
+test('demonstração começa vazia, registra histórico e reinicia sem persistir dados',async()=>{
+  const demo=new DemoStore();assert.equal((await demo.list()).items.length,0);
+  const item=await demo.create({id:crypto.randomUUID(),fields:workflowFields});
+  const updated=await demo.update(item.id,{version:1,stage:'solicitado'});
+  assert.equal(updated.events.length,2);assert.match(updated.events.at(-1).action,/operadora/);
+  await assert.rejects(()=>new DemoStore().detail(item.id),{status:404});
 });
 test('demonstração cadastra uma guia e aceita articulação personalizada',async()=>{
   const demo=new DemoStore(),before=(await demo.list()).items.length;
@@ -80,10 +81,11 @@ test('cadastro aparece imediatamente na fila e reaproveita o perfil do paciente'
   assert.equal(saved.fields.paciente,'Paciente de teste');assert.equal(profile.patient.convenio,'Particular');
 });
 test('perfil é corrigido em todas as guias, mas só a infiltração escolhida é cancelada',async()=>{
-  const demo=new DemoStore(),ana=(await demo.list()).items.filter(item=>item.fields.prontuario==='10021');
-  assert.ok(ana.length>1);
-  await demo.updatePatient('10021',{paciente:'Ana Corrigida',convenio:'Particular'});
-  const corrected=(await demo.list()).items.filter(item=>item.fields.prontuario==='10021');
+  const demo=new DemoStore();
+  await demo.create({id:crypto.randomUUID(),fields:workflowFields});
+  await demo.create({id:crypto.randomUUID(),fields:{...workflowFields,articulacao:'Ombro',lado:'Esquerdo',numeroAplicacao:'1',pedidoRacimed:'RC-10'}});
+  await demo.updatePatient('AB-102',{paciente:'Ana Corrigida',convenio:'Particular'});
+  const corrected=(await demo.list()).items.filter(item=>item.fields.prontuario==='AB-102');
   assert.ok(corrected.every(item=>item.fields.paciente==='Ana Corrigida'&&item.fields.convenio==='Particular'));
   const target=corrected[0],other=corrected[1];
   const changed=await demo.update(target.id,{version:target.version,stage:target.stage,checks:target.checks,fields:{articulacao:'Punho',lado:'Direito',numeroAplicacao:'3',pedidoRacimed:'RC-CORRIGIDO',dataPedido:'2026-01-02',medicacao:'Medicação Exemplo B',executor:'Dra. Exemplo B'}});

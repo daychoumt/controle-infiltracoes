@@ -12,14 +12,14 @@ O projeto evoluiu de um formulário isolado para uma interface única do setor d
 
 ## Experimente em dois minutos
 
-1. Abra o painel. Todos os registros são fictícios e identificados como demonstração.
-2. Abra **Ana Exemplo** para consultar, pelo prontuário, suas aplicações anteriores em diferentes articulações.
-3. Abra uma guia com pendência para ver o alerta destacado e a observação do que precisa ser corrigido.
-4. Cadastre uma guia escolhendo claramente 1ª, 2ª ou 3ª aplicação e uma condição como falta de carimbo ou ressonância aguardando envio.
-5. Em uma guia autorizada, informe o número, confira os documentos e avance com poucos cliques.
-6. Abra **Fechamento mensal**, escolha o tipo de folha e veja as relações separadas por convênio, prontas para impressão e assinatura.
+1. Abra o painel. A demonstração começa vazia para você testar o fluxo desde o primeiro cadastro.
+2. Selecione **Cadastrar primeiro paciente** e use somente informações fictícias.
+3. Escolha 1ª, 2ª ou 3ª aplicação, articulação, lado e uma condição como falta de carimbo ou ressonância aguardando envio.
+4. Abra a guia criada e use **Novo pedido deste paciente** para cadastrar outra articulação sem repetir prontuário, nome e convênio.
+5. Informe o número da guia, confira os documentos e avance as etapas com poucos cliques.
+6. Abra **Fechamento mensal** para testar as relações separadas por convênio, prontas para impressão e assinatura.
 
-A demonstração é interativa, mas não grava dados em servidores ou no armazenamento do navegador. Recarregar a página restaura os exemplos. Não insira informações reais nessa demonstração.
+A demonstração é interativa, mas não grava dados em servidores ou no armazenamento do navegador. Recarregar a página limpa todos os testes. Não insira informações reais nessa demonstração.
 
 ## O que está implementado
 

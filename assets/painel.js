@@ -81,7 +81,7 @@ function advanceSuccess(previousStage,record) {
     solicitado:'Autorização registrada. Agora informe quando a infiltração será agendada.',
     autorizado:`Agendamento registrado para ${displayDate(record.fields.dataAgendamento)}. A próxima etapa será registrar a realização depois do procedimento.`,
     agendado:`Realização registrada em ${displayDate(applicationDate(record.fields))}. Agora aguarde a guia assinada voltar ao setor.`,
-    realizado:'Recebimento da guia assinado registrado. Faça a conferência da documentação.',
+    realizado:'Recebimento da guia assinada registrado. Faça a conferência da documentação.',
     conferencia:'Conferência concluída. A guia está pronta para entrar no lote de faturamento.'
   })[previousStage] || 'Etapa atualizada e registrada no histórico.';
 }
@@ -131,9 +131,9 @@ async function openCase(id) {
   if(busy) return;const current=store,run=epoch;busy=true;
   try {
     const [record,patientSource]=await Promise.all([current.detail(id),allCases(current)]);if(run!==epoch) return;
-    records=[...new Map([...patientSource,...records].map(item=>[item.id,item])).values()];selected=record;renderDetail();detail.showModal();
+    records=[...new Map([...records,...patientSource,record].map(item=>[item.id,item])).values()];selected=record;renderDetail();if(!detail.open)detail.showModal();
   }
-  catch(error){if(run===epoch) displayError(error);}finally{busy=false;}
+  catch(error){if(run===epoch) displayError(error);}finally{busy=false;updateAdvanceState();}
 }
 function renderDetail() {
   const record=selected;
@@ -152,7 +152,7 @@ function renderDetail() {
   $('#patient-history').replaceChildren();
   for(const item of patientRecords) {
     const tr=node('tr'),statusCell=node('td'),open=node('button',item.id===record.id?'Processo aberto':'Abrir processo','text-button');
-    open.type='button';open.disabled=item.id===record.id;open.addEventListener('click',()=>{selected=item;renderDetail();});
+    open.type='button';open.disabled=item.id===record.id;open.addEventListener('click',()=>openCase(item.id));
     statusCell.append(node('span',stageLabel(item.stage),'pill '+item.stage),open);
     tr.append(node('td',jointLabel(item.fields)),node('td',item.fields.numeroAplicacao?`${item.fields.numeroAplicacao}ª de 3`:'—'),node('td',item.fields.numeroGuia||'—'),node('td',applicationDate(item.fields)?displayDate(applicationDate(item.fields)):'—'),statusCell);$('#patient-history').append(tr);
   }
@@ -192,7 +192,7 @@ async function save(advance=false) {
 }
 $('#case-form').addEventListener('submit',e=>{e.preventDefault();save();});
 $('#case-form').addEventListener('input',updateAdvanceState);$('#case-form').addEventListener('change',updateAdvanceState);
-$('#advance').addEventListener('click',()=>{const readiness=advanceReadiness(selected);if(!readiness.ready){$('#case-message').textContent=readiness.message;$('#case-message').className='message error';if(readiness.focus)$(readiness.focus)?.focus();return;}if(selected?.stage==='pronto_faturamento'){detail.close();openBatches(selected.id);return;}save(true);});
+$('#advance').addEventListener('click',()=>{if(busy||!selected)return;const readiness=advanceReadiness(selected);if(!readiness.ready){$('#case-message').textContent=readiness.message;$('#case-message').className='message error';if(readiness.focus)$(readiness.focus)?.focus();return;}if(selected.stage==='pronto_faturamento'){detail.close();openBatches(selected.id);return;}save(true);});
 editProfileButton.addEventListener('click',()=>{
   if(!selected)return;
   profileForm.elements.prontuario.value=selected.fields.prontuario;
@@ -207,9 +207,9 @@ profileForm.addEventListener('submit',async event=>{
     const {patient}=await current.updatePatient(chart,{paciente:profileForm.elements.paciente.value,convenio:profileForm.elements.convenio.value});
     if(run!==epoch)return;
     records=records.map(record=>record.fields.prontuario===chart?{...record,fields:{...record.fields,paciente:patient.paciente,convenio:patient.convenio}}:record);
-    selected=records.find(record=>record.id===selected.id) || selected;profileDialog.close();render();renderDetail();report('Perfil do paciente corrigido em todas as guias.');
+    selected={...selected,fields:{...selected.fields,paciente:patient.paciente,convenio:patient.convenio}};profileDialog.close();render();renderDetail();report('Perfil do paciente corrigido em todas as guias.');
   } catch(error){if(run===epoch)$('#profile-error').textContent=error.message || 'Não foi possível corrigir o perfil.';}
-  finally{busy=false;$('#save-profile').disabled=false;}
+  finally{busy=false;$('#save-profile').disabled=false;updateAdvanceState();}
 });
 function toggleProcessJoint() {
   const other=processForm.elements.articulacao.value==='Outra articulação';
@@ -233,7 +233,7 @@ processForm.addEventListener('submit',async event=>{
     if(run!==epoch)return;
     selected=updated;records=records.map(record=>record.id===updated.id?updated:record);processDialog.close();render();renderDetail();report('Dados corrigidos somente nesta infiltração.');
   } catch(error){if(run===epoch)$('#process-error').textContent=error.message || 'Não foi possível corrigir este processo.';}
-  finally{busy=false;$('#save-process').disabled=false;}
+  finally{busy=false;$('#save-process').disabled=false;updateAdvanceState();}
 });
 cancelCaseButton.addEventListener('click',()=>{
   if(!selected)return;
@@ -247,7 +247,7 @@ cancelForm.addEventListener('submit',async event=>{
     if(run!==epoch)return;
     selected=updated;records=records.map(record=>record.id===updated.id?updated:record);cancelDialog.close();render();renderDetail();report('Somente a infiltração selecionada foi cancelada. As demais continuam ativas.');
   } catch(error){if(run===epoch)$('#cancel-error').textContent=error.message || 'Não foi possível cancelar este processo.';}
-  finally{busy=false;$('#confirm-cancel').disabled=false;}
+  finally{busy=false;$('#confirm-cancel').disabled=false;updateAdvanceState();}
 });
 detail.addEventListener('cancel',e=>{if(busy)e.preventDefault();});
 detail.querySelector('[data-close]').addEventListener('click',()=>{selected=null;});
@@ -295,7 +295,7 @@ newForm.addEventListener('submit',async e=>{
     const record=await current.create({id:createId,fields});if(run!==epoch)return;
     records=[record,...records.filter(r=>r.id!==record.id)];render();newDialog.close();selected=record;renderDetail();detail.showModal();report(current instanceof DemoStore?'Guia adicionada à demonstração. Ela será apagada ao atualizar a página.':'Guia salva na base do setor e adicionada ao controle.');
   } catch(error){if(run===epoch){if(error.status===401)displayError(error);else $('#new-error').textContent=error.message || 'Não foi possível confirmar o cadastro. Confira a fila antes de tentar novamente.';}}
-  finally{busy=false;$('#create-case').disabled=false;}
+  finally{busy=false;$('#create-case').disabled=false;updateAdvanceState();}
 });
 let patientLookup=0;
 async function reusePatient() {

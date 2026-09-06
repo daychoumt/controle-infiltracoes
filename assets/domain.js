@@ -10,6 +10,10 @@ export const CHECKS = {
   autorizada: 'Guia autorizada', assinada: 'Guia assinada',
   execucao: 'Execução conferida', documentos: 'Documentação conferida'
 };
+export const CHECK_MIN_STAGE = Object.freeze({
+  autorizada:'autorizado', execucao:'realizado',
+  assinada:'conferencia', documentos:'conferencia'
+});
 export const ROLES = {recepcao:'Setor de Autorizações',admin:'Administrador'};
 // Somente exemplos fictícios ficam no frontend público. Em produção, as listas
 // reais são carregadas do backend depois do login.
@@ -159,6 +163,11 @@ export function nextStage(stage) {
   const index=flow.findIndex(([id])=>id===stage);
   return index<0?null:flow[index+1]?.[0] || null;
 }
+export function canReviewCheck(key,stage) {
+  const flow=STAGES.filter(([id])=>id!=='cancelado').map(([id])=>id);
+  const current=flow.indexOf(stage),minimum=flow.indexOf(CHECK_MIN_STAGE[key]);
+  return current>=0 && minimum>=0 && current>=minimum;
+}
 export function canEdit(record, role) {
   return !['faturamento','cancelado'].includes(record.stage) && ['admin','recepcao'].includes(role);
 }
@@ -203,10 +212,14 @@ export function transition(record, input, role, references) {
   if (['autorizado','agendado','realizado','conferencia','pronto_faturamento','faturamento'].includes(target) && !checks.autorizada) throw problem(400,'Confirme a autorização da guia antes de avançar.');
   if (['autorizado','agendado','realizado','conferencia','pronto_faturamento','faturamento'].includes(target) && !fields.numeroGuia) throw problem(400,'Informe o número da guia autorizada antes de avançar.');
   if(advancing&&target==='agendado'&&!fields.dataAgendamento)throw problem(400,'Informe a data agendada antes de confirmar o agendamento.');
+  if(advancing&&target==='agendado'&&fields.dataAgendamento<fields.dataPedido)throw problem(400,'A data agendada não pode ser anterior à data do pedido.');
   const dataAplicacao=fields.dataAplicacao || fields.data || '';
-  if (advancing && target==='realizado' && (!dataAplicacao || dataAplicacao>today)) throw problem(400,'Informe a data da realização antes de marcar como realizada.');
+  if(advancing&&target==='realizado'&&!dataAplicacao)throw problem(400,'O agendamento já está registrado. Informe a data em que a infiltração realmente aconteceu.');
+  if(advancing&&target==='realizado'&&dataAplicacao>today)throw problem(400,'A data da realização não pode ser futura. Mantenha a guia como agendada até o procedimento acontecer.');
+  if(advancing&&target==='realizado'&&dataAplicacao<fields.dataPedido)throw problem(400,'A data da realização não pode ser anterior à data do pedido.');
   if(advancing&&target==='realizado')checks.execucao=true;
   if(advancing&&target==='conferencia'){checks.assinada=true;fields.dataGuiaRecebida=fields.dataGuiaRecebida||today;}
+  for(const key of Object.keys(CHECKS))if(!canReviewCheck(key,target))checks[key]=false;
   if (['pronto_faturamento','faturamento'].includes(target) && Object.values(checks).some(value=>!value)) throw problem(400,'Conclua os quatro itens de conferência antes de deixar a guia pronta para o faturamento.');
   if(advancing&&target==='pronto_faturamento')fields.dataConferencia=fields.dataConferencia||today;
   if(advancing && target==='faturamento'){

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {transition,emptyChecks,validateFields,validateCaseFields,validDate,jointLabel,attentionState} from '../assets/domain.js';
+import {transition,emptyChecks,validateFields,validateCaseFields,validDate,jointLabel,attentionState,canReviewCheck} from '../assets/domain.js';
 import {DemoStore} from '../assets/store.js';
 const fields={prontuario:'AB-102',paciente:'Paciente de teste',convenio:'Particular',medicacao:'',articulacao:'Joelho',lado:'Direito',numeroAplicacao:'1',pedidoRacimed:'RC-1',aplicacao:'1ª aplicação · Joelho direito',numeroGuia:'GUIA-1',pendencia:false,condicaoProcesso:'regular',observacao:'',dataPedido:'2025-12-20',dataAgendamento:'2026-01-01',dataAplicacao:'2026-01-01',data:'2026-01-01',executor:'Dr. Exemplo A',atendente:'Autorizações'};
 const all={autorizada:true,assinada:true,execucao:true,documentos:true};
@@ -34,7 +34,21 @@ test('não registra autorização sem confirmação ou número da guia',()=>{
   assert.throws(()=>transition({...record('solicitado'),fields:{...fields,numeroGuia:''}},{version:1,stage:'autorizado'},'recepcao'),{status:400});
 });
 test('não permite pular etapas',()=>assert.throws(()=>transition(record('recebido',all),{version:1,stage:'agendado'},'admin'),{status:400}));
-test('aplicação futura não pode ser marcada como realizada',()=>assert.throws(()=>transition({...record('agendado',all),fields:{...fields,dataAplicacao:'2099-01-01',data:'2099-01-01'}},{version:1,stage:'realizado'},'admin'),{status:400}));
+test('agendamento usa a data agendada sem exigir a data da realização',()=>{
+  const current={...record('autorizado',{...emptyChecks(),autorizada:true}),fields:{...fields,dataAgendamento:'',dataAplicacao:'',data:''}};
+  const scheduled=transition(current,{version:1,stage:'agendado',fields:{dataAgendamento:'2026-01-15'}},'recepcao');
+  assert.equal(scheduled.stage,'agendado');assert.equal(scheduled.fields.dataAgendamento,'2026-01-15');assert.equal(scheduled.fields.dataAplicacao,'');
+});
+test('realização ausente ou futura apresenta uma orientação específica',()=>{
+  const current={...record('agendado',all),fields:{...fields,dataAplicacao:'',data:''}};
+  assert.throws(()=>transition(current,{version:1,stage:'realizado'},'admin'),error=>error.status===400&&/agendamento já está registrado/i.test(error.message));
+  assert.throws(()=>transition({...current,fields:{...current.fields,dataAplicacao:'2099-01-01',data:'2099-01-01'}},{version:1,stage:'realizado'},'admin'),error=>error.status===400&&/não pode ser futura/i.test(error.message));
+});
+test('conferências ficam bloqueadas até a etapa correta',()=>{
+  assert.equal(canReviewCheck('autorizada','autorizado'),true);assert.equal(canReviewCheck('execucao','agendado'),false);assert.equal(canReviewCheck('documentos','conferencia'),true);
+  const cleaned=transition(record('agendado',all),{version:1},'recepcao');
+  assert.deepEqual(cleaned.checks,{autorizada:true,assinada:false,execucao:false,documentos:false});
+});
 test('todos os documentos são necessários para deixar a guia pronta',()=>{
   for(const missing of Object.keys(all))assert.throws(()=>transition(record('conferencia',{...all,[missing]:false}),{version:1,stage:'pronto_faturamento'},'recepcao'),{status:400});
 });

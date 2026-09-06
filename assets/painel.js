@@ -1,7 +1,7 @@
-import {STAGES,CHECKS,ROLES,WORKFLOW_FIELD_LABELS,emptyChecks,pending,nextStage,canEdit,localDate,applicationLabel,jointLabel,processLabel,attentionState,nextActionLabel} from './domain.js?v=10';
-import {$,node,fillOptions,closeDialogs,summary,displayDate} from './ui.js?v=10';
-import {DemoStore,ApiStore} from './store.js?v=10';
-import {config} from './config.js?v=10';
+import {STAGES,CHECKS,ROLES,WORKFLOW_FIELD_LABELS,emptyChecks,pending,nextStage,canEdit,canReviewCheck,localDate,applicationLabel,jointLabel,processLabel,attentionState,nextActionLabel} from './domain.js?v=11';
+import {$,node,fillOptions,closeDialogs,summary,displayDate} from './ui.js?v=11';
+import {DemoStore,ApiStore} from './store.js?v=11';
+import {config} from './config.js?v=11';
 fillOptions();closeDialogs();
 let store=new DemoStore(),records=[],reportRecords=[],batches=[],cursor=null,filter='all',selected=null,epoch=0,busy=false,createId=null,loading=false,lastBatch=null;
 const configured=Boolean(config.apiUrl && config.firebaseApiKey);
@@ -35,6 +35,56 @@ const applicationDate=fields=>fields.dataAplicacao || fields.data || '';
 const requestDate=fields=>fields.dataPedido || '';
 const billingDate=fields=>fields.dataFaturamento || '';
 const stageHints={all:'Visão geral',pendencia:'Corrigir antes de seguir',atrasada:'Prioridade do setor',hoje:'Retorno ou procedimento',recebido:'Conferir e solicitar',solicitado:'Acompanhar operadora',autorizado:'Providenciar agendamento',agendado:'Aguardar realização',realizado:'Recolher a guia',conferencia:'Conferir documentos',pronto_faturamento:'Incluir em um lote',faturamento:'Entrega registrada',cancelado:'Processo encerrado'};
+const actionInstructions={
+  recebido:['Enviar pedido à operadora','Depois de conferir o pedido, registre o envio para iniciar o acompanhamento da autorização.'],
+  solicitado:['Registrar autorização','Informe o número da guia quando a operadora autorizar o procedimento.'],
+  autorizado:['Registrar agendamento','Informe a data agendada e confirme. Essa data não registra a realização.'],
+  agendado:['Aguardar o procedimento','O agendamento já está salvo. Registre a realização somente depois que a infiltração acontecer.'],
+  realizado:['Receber a guia assinada','Quando a guia assinada voltar ao setor, registre o recebimento para iniciar a conferência.'],
+  conferencia:['Concluir a conferência','Marque os itens realmente conferidos. A guia só ficará pronta quando os quatro estiverem completos.'],
+  pronto_faturamento:['Entregar em lote','Adicione a guia a um lote do mesmo convênio e imprima o protocolo de entrega.']
+};
+function caseFormState() {
+  return {
+    fields:{numeroGuia:$('#case-guide').value.trim(),dataAgendamento:$('#case-scheduled-date').value,dataAplicacao:$('#case-date').value,retornoEm:$('#case-followup').value,condicaoProcesso:$('#case-condition').value,observacao:$('#case-observation').value},
+    checks:Object.fromEntries([...$('#case-checks').querySelectorAll('input')].map(input=>[input.name,input.checked]))
+  };
+}
+function advanceReadiness(record=selected) {
+  if(!record)return {ready:false,message:'Abra uma guia para continuar.'};
+  const next=nextStage(record.stage),{fields,checks}=caseFormState(),today=localDate();
+  if(!next)return {ready:false,message:'Este processo já chegou à última etapa.'};
+  if(fields.condicaoProcesso!=='regular')return {ready:false,message:'Resolva a pendência e altere a situação da documentação para “Sem pendência” antes de avançar.',focus:'#case-condition'};
+  if(record.stage==='solicitado'&&!fields.numeroGuia)return {ready:false,message:'Informe o número da guia autorizada para registrar a autorização.',focus:'#case-guide'};
+  if(record.stage==='autorizado'&&!fields.dataAgendamento)return {ready:false,message:'Informe a data agendada. Depois clique em “Registrar agendamento”.',focus:'#case-scheduled-date'};
+  if(record.stage==='autorizado'&&fields.dataAgendamento<requestDate(record.fields))return {ready:false,message:'A data agendada não pode ser anterior à data do pedido.',focus:'#case-scheduled-date'};
+  if(record.stage==='agendado'&&!fields.dataAplicacao)return {ready:false,message:'Agendamento já registrado. Depois que a infiltração acontecer, informe a data da realização.',focus:'#case-date'};
+  if(record.stage==='agendado'&&fields.dataAplicacao>today)return {ready:false,message:'A realização não pode ser registrada com uma data futura. Mantenha a guia como agendada.',focus:'#case-date'};
+  if(record.stage==='agendado'&&fields.dataAplicacao<requestDate(record.fields))return {ready:false,message:'A data da realização não pode ser anterior à data do pedido.',focus:'#case-date'};
+  if(record.stage==='conferencia') {
+    const missing=Object.entries(CHECKS).filter(([key])=>!checks[key]).map(([,label])=>label);
+    if(missing.length)return {ready:false,message:`Ainda falta conferir: ${missing.join(', ')}.`,focus:'#case-checks input:not(:checked):not(:disabled)'};
+  }
+  return {ready:true,message:actionInstructions[record.stage]?.[1] || 'Os dados necessários estão preenchidos.'};
+}
+function updateAdvanceState() {
+  const guidance=$('#action-guidance'),button=$('#advance');
+  if(!selected || button.hidden){guidance.hidden=true;return;}
+  const readiness=advanceReadiness(selected),copy=actionInstructions[selected.stage] || ['Próxima etapa','Confira os dados antes de continuar.'];
+  guidance.hidden=false;guidance.className=`action-guidance ${readiness.ready?'ready':'blocked'}`;
+  guidance.replaceChildren(node('strong',copy[0]),node('span',readiness.message));
+  button.disabled=busy || !readiness.ready;
+}
+function advanceSuccess(previousStage,record) {
+  return ({
+    recebido:'Pedido registrado como enviado à operadora. O processo agora está em análise.',
+    solicitado:'Autorização registrada. Agora informe quando a infiltração será agendada.',
+    autorizado:`Agendamento registrado para ${displayDate(record.fields.dataAgendamento)}. A próxima etapa será registrar a realização depois do procedimento.`,
+    agendado:`Realização registrada em ${displayDate(applicationDate(record.fields))}. Agora aguarde a guia assinada voltar ao setor.`,
+    realizado:'Recebimento da guia assinado registrado. Faça a conferência da documentação.',
+    conferencia:'Conferência concluída. A guia está pronta para entrar no lote de faturamento.'
+  })[previousStage] || 'Etapa atualizada e registrada no histórico.';
+}
 function render() {
   const hasRecords=records.length>0;
   $('.status-section').hidden=!hasRecords;$('.toolbar').hidden=!hasRecords;$('.queue-card>.table-scroll').hidden=!hasRecords;$('.workflow-note').hidden=!hasRecords;
@@ -108,7 +158,8 @@ function renderDetail() {
   }
   const editable=canEdit(record,store.role),checks=$('#case-checks');checks.replaceChildren();
   for(const [key,label] of Object.entries(CHECKS)) {
-    const item=node('label',null,'check-item'),input=node('input');input.type='checkbox';input.name=key;input.checked=record.checks[key];input.disabled=!editable;item.append(input,node('span',label));checks.append(item);
+    const available=canReviewCheck(key,record.stage),item=node('label',null,`check-item${available?'':' locked'}`),input=node('input');input.type='checkbox';input.name=key;input.checked=Boolean(record.checks[key]&&available);input.disabled=!editable||!available;item.append(input,node('span',label));
+    if(!available)item.append(node('small','Será liberado na etapa correta.'));checks.append(item);
   }
   $('#save-checks').hidden=!editable;
   addPatientCaseButton.hidden=!['recepcao','admin'].includes(store.role);
@@ -116,11 +167,11 @@ function renderDetail() {
   editCaseButton.hidden=!editable;
   cancelCaseButton.hidden=!editable;
   $('#case-guide').disabled=$('#case-scheduled-date').disabled=$('#case-date').disabled=$('#case-followup').disabled=$('#case-condition').disabled=$('#case-observation').disabled=!editable;
-  $('#check-help').textContent=record.stage==='faturamento'?'Entrega registrada. A guia permanece disponível para consulta e impressão.':'Marque somente o que já foi conferido pelo setor.';
+  $('#check-help').textContent=record.stage==='faturamento'?'Entrega registrada. A guia permanece disponível para consulta e impressão.':record.stage==='conferencia'?'Marque somente o que já foi conferido pelo setor.':'Os itens serão liberados automaticamente conforme a guia avançar.';
   const next=nextStage(record.stage);
   $('#advance').hidden=!next || !editable;
   $('#advance').textContent=nextActionLabel(record.stage);
-  $('#case-message').textContent='';$('#case-history').replaceChildren();
+  $('#case-message').textContent='';$('#case-message').className='message';updateAdvanceState();$('#case-history').replaceChildren();
   for(const event of [...record.events].reverse()) {
     const item=node('li',event.action),date=new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short'}).format(new Date(event.at));
     item.append(node('small',`${date} · ${ROLES[event.actor] || event.actor}`));$('#case-history').append(item);
@@ -129,18 +180,19 @@ function renderDetail() {
 async function save(advance=false) {
   if(busy || !selected) return;busy=true;
   const current=store,run=epoch,previous=selected;
-  const checks=Object.fromEntries([...$('#case-checks').querySelectorAll('input')].map(i=>[i.name,i.checked]));
-  const fields={numeroGuia:$('#case-guide').value,dataAgendamento:$('#case-scheduled-date').value,dataAplicacao:$('#case-date').value,retornoEm:$('#case-followup').value,condicaoProcesso:$('#case-condition').value,observacao:$('#case-observation').value};
+  const {checks,fields}=caseFormState();
   $('#save-checks').disabled=$('#advance').disabled=true;
   try {
     const updated=await current.update(previous.id,{version:previous.version,fields,checks,stage:advance?nextStage(previous.stage):previous.stage});
     if(run!==epoch) return;
-    selected=updated;records=records.map(r=>r.id===updated.id?updated:r);render();renderDetail();$('#case-message').textContent=advance?'Situação atualizada automaticamente no histórico.':'Alterações salvas no histórico.';
+    selected=updated;records=records.map(r=>r.id===updated.id?updated:r);render();renderDetail();const message=advance?advanceSuccess(previous.stage,updated):'Alterações salvas no histórico.';$('#case-message').textContent=message;$('#case-message').className='message success';report(message);
   } catch(error) {
-    if(run===epoch) {if(error.status===401)displayError(error);else $('#case-message').textContent=error.status===409?'Este atendimento mudou. Feche e reabra os detalhes para carregar a versão atual.':error.message || 'Não foi possível salvar. Reabra o atendimento para conferir antes de tentar novamente.';}
-  } finally {busy=false;$('#save-checks').disabled=$('#advance').disabled=false;}
+    if(run===epoch) {if(error.status===401)displayError(error);else {$('#case-message').textContent=error.status===409?'Este atendimento mudou. Feche e reabra os detalhes para carregar a versão atual.':error.message || 'Não foi possível salvar. Reabra o atendimento para conferir antes de tentar novamente.';$('#case-message').className='message error';}}
+  } finally {busy=false;$('#save-checks').disabled=false;updateAdvanceState();}
 }
-$('#case-form').addEventListener('submit',e=>{e.preventDefault();save();});$('#advance').addEventListener('click',()=>{if(selected?.stage==='pronto_faturamento'){detail.close();openBatches(selected.id);return;}save(true);});
+$('#case-form').addEventListener('submit',e=>{e.preventDefault();save();});
+$('#case-form').addEventListener('input',updateAdvanceState);$('#case-form').addEventListener('change',updateAdvanceState);
+$('#advance').addEventListener('click',()=>{const readiness=advanceReadiness(selected);if(!readiness.ready){$('#case-message').textContent=readiness.message;$('#case-message').className='message error';if(readiness.focus)$(readiness.focus)?.focus();return;}if(selected?.stage==='pronto_faturamento'){detail.close();openBatches(selected.id);return;}save(true);});
 editProfileButton.addEventListener('click',()=>{
   if(!selected)return;
   profileForm.elements.prontuario.value=selected.fields.prontuario;

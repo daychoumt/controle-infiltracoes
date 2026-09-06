@@ -1,4 +1,4 @@
-import {validateCaseFields,emptyChecks,transition,eventLabel,problem,localDate} from './domain.js?v=10';
+import {validateCaseFields,emptyChecks,transition,eventLabel,problem,localDate} from './domain.js?v=11';
 export class DemoStore {
   constructor() {
     this.role='recepcao'; this.offset=0;

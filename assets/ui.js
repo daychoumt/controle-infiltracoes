@@ -1,4 +1,4 @@
-import {CONVENIOS, MEDICACOES, MEDICOS, ARTICULACOES, LADOS, PROCESS_CONDITIONS, FIELD_LABELS, processLabel} from './domain.js?v=10';
+import {CONVENIOS, MEDICACOES, MEDICOS, ARTICULACOES, LADOS, PROCESS_CONDITIONS, FIELD_LABELS, processLabel} from './domain.js?v=11';
 export const $ = (selector,root=document) => root.querySelector(selector);
 export function node(tag,text,className) { const el=document.createElement(tag); if(text != null) el.textContent=text; if(className) el.className=className; return el; }
 export function fillOptions(root=document,references=null,reset=false) {

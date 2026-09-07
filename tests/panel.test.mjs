@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import {createContext,runInContext} from 'node:vm';
 import * as domain from '../assets/domain.js';
 import {DemoStore,ApiStore} from '../assets/store.js';
+import {SessionGuard} from '../assets/session.js';
 
 // Exercise the real panel controller without a browser, network or patient data.
 // This small view double implements only the controls used by these workflows.
@@ -26,15 +27,15 @@ class Control {
   focus(){}
   reset(){this.formValues={};}
 }
-async function panel(source) {
+async function panel(source,config={apiUrl:'',firebaseApiKey:''},search='') {
   const controls=new Map(),$=selector=>{
     if(!controls.has(selector))controls.set(selector,new Control());
     return controls.get(selector);
   };
   const context=createContext({
-    ...domain,DemoStore,ApiStore,$,node:(...args)=>new Control(...args),
+    ...domain,DemoStore,ApiStore,SessionGuard,$,node:(...args)=>new Control(...args),
     fillOptions(){},closeDialogs(){},summary(){},displayDate:value=>value||'—',
-    config:{apiUrl:'',firebaseApiKey:''},crypto,structuredClone,
+    config,crypto,structuredClone,location:{search},URLSearchParams,
     document:{querySelector:$,querySelectorAll:()=>[]},
     FormData:class {constructor(form){this.entries=Object.entries(form.formValues);}[Symbol.iterator](){return this.entries[Symbol.iterator]();}}
   });
@@ -109,4 +110,11 @@ test('piloto completa somente o ombro, preserva os joelhos e entrega um único p
   const batch=await source.createBatch({id:crypto.randomUUID(),caseIds:[shoulder.id],competencia:'2026-01',recebidoPor:'Equipe fictícia'});
   assert.equal(batch.items.length,1);assert.equal(batch.items[0].stage,'faturamento');
   assert.equal((await source.detail(right.id)).stage,'autorizado');assert.equal((await source.detail(left.id)).stage,'autorizado');
+});
+
+test('painel configurado começa bloqueado, mas preserva uma demonstração explicitamente solicitada',async()=>{
+  const config={apiUrl:'https://amot-clinica.workers.dev',firebaseApiKey:'config-publica'};
+  const locked=await panel(new DemoStore(),config);
+  assert.equal(locked.$('#login-dialog').open,true);assert.equal(locked.$('#login-dialog [data-close]').hidden,true);assert.equal(locked.$('#demo-controls').hidden,true);
+  const demo=await panel(new DemoStore(),config,'?demo=1');assert.equal(demo.$('#login-dialog').open,false);
 });

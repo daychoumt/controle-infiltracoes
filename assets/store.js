@@ -1,4 +1,4 @@
-import {validateCaseFields,emptyChecks,transition,eventLabel,problem,localDate} from './domain.js?v=11';
+import {validateCaseFields,emptyChecks,transition,eventLabel,problem,localDate} from './domain.js?v=13';
 export class DemoStore {
   constructor() {
     this.role='recepcao'; this.offset=0;
@@ -47,16 +47,37 @@ export class DemoStore {
   }
 }
 export class ApiStore {
-  constructor(config,token) { this.base=config.apiUrl.replace(/\/$/,'');this.token=token;this.role=null; }
+  constructor(config,credentials) {
+    this.base=config.apiUrl.replace(/\/$/,'');
+    this.apiKey=config.firebaseApiKey;
+    this.token=typeof credentials==='string'?credentials:credentials?.idToken || '';
+    this.refreshToken=typeof credentials==='string'?'':credentials?.refreshToken || '';
+    this.role=null;
+  }
+  async renew() {
+    if(!this.refreshToken)throw problem(401,'Sua sessão expirou. Entre novamente.');
+    const response=await fetch(`https://securetoken.googleapis.com/v1/token?key=${encodeURIComponent(this.apiKey)}`,{
+      method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:new URLSearchParams({grant_type:'refresh_token',refresh_token:this.refreshToken}),
+      signal:AbortSignal.timeout(12000)
+    });
+    const credentials=await response.json().catch(()=>({}));
+    if(!response.ok || !credentials.id_token){this.clear();throw problem(401,'Sua sessão expirou. Entre novamente.');}
+    this.token=credentials.id_token;this.refreshToken=credentials.refresh_token || this.refreshToken;
+  }
+  fetch(path,options={}) {
+    return fetch(this.base+path,{...options,cache:'no-store',headers:{'Authorization':`Bearer ${this.token}`,'Content-Type':'application/json'},signal:AbortSignal.timeout(15000)});
+  }
   async request(path,options={}) {
-    const response=await fetch(this.base+path,{...options,cache:'no-store',headers:{'Authorization':`Bearer ${this.token}`,'Content-Type':'application/json'},signal:AbortSignal.timeout(15000)});
+    let response=await this.fetch(path,options);
+    if(response.status===401 && this.refreshToken){await this.renew();response=await this.fetch(path,options);}
     const body=await response.json().catch(()=>({}));
     if(!response.ok) throw problem(response.status,body.error || 'Não foi possível acessar o painel.');
     return body;
   }
   async session() { const user=await this.request('/session');this.role=user.role;return user; }
   references() { return this.request('/references'); }
-  patient(prontuario) { return this.request('/patient?prontuario='+encodeURIComponent(prontuario)); }
+  patient(prontuario) { return this.request('/patient/lookup',{method:'POST',body:JSON.stringify({prontuario})}); }
   updatePatient(prontuario,profile) { return this.request('/patient',{method:'PATCH',body:JSON.stringify({prontuario,...profile})}); }
   list(cursor='') { return this.request('/cases'+(cursor ? '?cursor='+encodeURIComponent(cursor) : '')); }
   detail(id) { return this.request('/cases/'+encodeURIComponent(id)); }
@@ -64,5 +85,5 @@ export class ApiStore {
   update(id,input) { return this.request('/cases/'+encodeURIComponent(id),{method:'PATCH',body:JSON.stringify(input)}); }
   listBatches() {return this.request('/batches');}
   createBatch(input) {return this.request('/batches',{method:'POST',body:JSON.stringify(input)});}
-  clear() {this.token='';}
+  clear() {this.token='';this.refreshToken='';}
 }

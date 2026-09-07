@@ -25,6 +25,7 @@ const legacyStage=stage=>({recebido:'autorizacao',solicitado:'autorizacao',autor
 const legacyStageV2=stage=>({recebido:'recebido',solicitado:'solicitado',autorizado:'agendado',agendado:'agendado',realizado:'realizado',conferencia:'conferencia',pronto_faturamento:'conferencia',faturamento:'faturamento',cancelado:'recebido'})[stage] || 'recebido';
 const decode=row=>({id:row.id,fields:JSON.parse(row.payload),stage:row.stage_v3 || row.stage_v2 || ({autorizacao:'solicitado',concluido:'faturamento'}[row.stage] || row.stage),checks:JSON.parse(row.checks),version:row.version,createdAt:row.created_at,updatedAt:row.updated_at,stageChangedAt:row.stage_changed_at || row.updated_at});
 const decodeBatch=row=>({id:row.id,reference:row.reference,competencia:row.competencia,convenio:row.convenio,recebidoPor:row.recebido_por,observacao:row.observacao,createdAt:row.created_at,createdBy:row.created_by,total:Number(row.total || 0)});
+const duplicateProcess=error=>/idx_cases_active_process/i.test(String(error?.message || error));
 export class Repository {
   constructor(db){this.db=db;}
   stmt(key,...values){return this.db.prepare(SQL[key]).bind(...values);}
@@ -65,18 +66,29 @@ export class Repository {
       if(existing.created_by!==user.uid || existing.payload!==JSON.stringify(record.fields))throw problem(409,'Este protocolo já existe. Confira a fila antes de abrir outro atendimento.');
       return this.get(record.id);
     }
-    await this.db.batch([
-      this.stmt('createPatient',record.fields.prontuario,record.fields.paciente,record.fields.convenio,record.createdAt,record.updatedAt,user.uid),
-      this.stmt('create',record.id,JSON.stringify(record.fields),legacyStage(record.stage),legacyStageV2(record.stage),record.stage,JSON.stringify(record.checks),record.createdAt,record.updatedAt,record.stageChangedAt || record.updatedAt,user.uid),
-      this.stmt('createEvent',record.id,record.createdAt,user.uid,user.role,eventLabel(null,record))
-    ]);
+    try {
+      await this.db.batch([
+        this.stmt('createPatient',record.fields.prontuario,record.fields.paciente,record.fields.convenio,record.createdAt,record.updatedAt,user.uid),
+        this.stmt('create',record.id,JSON.stringify(record.fields),legacyStage(record.stage),legacyStageV2(record.stage),record.stage,JSON.stringify(record.checks),record.createdAt,record.updatedAt,record.stageChangedAt || record.updatedAt,user.uid),
+        this.stmt('createEvent',record.id,record.createdAt,user.uid,user.role,eventLabel(null,record))
+      ]);
+    } catch(error) {
+      if(duplicateProcess(error))throw problem(409,'Já existe um processo ativo para esta articulação, lado e aplicação. Abra a guia existente para atualizá-la.');
+      throw error;
+    }
     return this.get(record.id);
   }
   async update(previous,updated,user) {
-    const result=await this.db.batch([
-      this.stmt('updateEvent',updated.updatedAt,user.uid,user.role,eventLabel(previous,updated),previous.id,previous.version),
-      this.stmt('update',JSON.stringify(updated.fields),legacyStage(updated.stage),legacyStageV2(updated.stage),updated.stage,JSON.stringify(updated.checks),updated.updatedAt,updated.stageChangedAt || updated.updatedAt,previous.id,previous.version)
-    ]);
+    let result;
+    try {
+      result=await this.db.batch([
+        this.stmt('updateEvent',updated.updatedAt,user.uid,user.role,eventLabel(previous,updated),previous.id,previous.version),
+        this.stmt('update',JSON.stringify(updated.fields),legacyStage(updated.stage),legacyStageV2(updated.stage),updated.stage,JSON.stringify(updated.checks),updated.updatedAt,updated.stageChangedAt || updated.updatedAt,previous.id,previous.version)
+      ]);
+    } catch(error) {
+      if(duplicateProcess(error))throw problem(409,'Já existe outro processo ativo para esta articulação, lado e aplicação.');
+      throw error;
+    }
     if(result[1].meta.changes!==1)throw problem(409,'Este atendimento foi atualizado. Reabra os detalhes antes de alterar.');
     return this.get(previous.id);
   }

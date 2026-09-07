@@ -1,10 +1,13 @@
-import {STAGES,CHECKS,ROLES,WORKFLOW_FIELD_LABELS,emptyChecks,pending,nextStage,canEdit,canReviewCheck,localDate,applicationLabel,jointLabel,processLabel,attentionState,nextActionLabel} from './domain.js?v=11';
-import {$,node,fillOptions,closeDialogs,summary,displayDate} from './ui.js?v=11';
-import {DemoStore,ApiStore} from './store.js?v=11';
-import {config} from './config.js?v=11';
+import {STAGES,CHECKS,ROLES,WORKFLOW_FIELD_LABELS,emptyChecks,pending,nextStage,canEdit,canReviewCheck,localDate,applicationLabel,jointLabel,processLabel,attentionState,nextActionLabel} from './domain.js?v=13';
+import {$,node,fillOptions,closeDialogs,summary,displayDate} from './ui.js?v=13';
+import {DemoStore,ApiStore} from './store.js?v=13';
+import {SessionGuard} from './session.js?v=13';
+import {config} from './config.js?v=13';
 fillOptions();closeDialogs();
 let store=new DemoStore(),records=[],reportRecords=[],batches=[],cursor=null,filter='all',selected=null,epoch=0,busy=false,createId=null,loading=false,lastBatch=null;
 const configured=Boolean(config.apiUrl && config.firebaseApiKey);
+const publicDemo=!configured || (typeof location!=='undefined' && new URLSearchParams(location.search).get('demo')==='1');
+const sessionGuard=new SessionGuard(()=>signOut('A sessão foi bloqueada após 15 minutos sem uso. Entre novamente para continuar.'));
 const status=$('#status'),detail=$('#case-dialog'),newDialog=$('#new-dialog'),newForm=$('#new-case');
 const profileDialog=$('#profile-dialog'),profileForm=$('#profile-form'),processDialog=$('#process-dialog'),processForm=$('#process-form'),cancelDialog=$('#cancel-dialog'),cancelForm=$('#cancel-form');
 const batchDialog=$('#batch-dialog'),batchForm=$('#batch-form');
@@ -16,7 +19,7 @@ const editCaseButton=node('button','Corrigir dados desta infiltração','button 
 const cancelCaseButton=node('button','Cancelar esta infiltração','button secondary danger-outline');cancelCaseButton.type='button';$('#advance').before(cancelCaseButton);
 function report(message) {status.textContent=message;}
 function displayError(error) {
-  if(error.status===401) {signOut();report('Sua sessão expirou. Entre novamente para consultar a equipe.');}
+  if(error.status===401) {signOut('Sua sessão expirou. Entre novamente para consultar a equipe.');}
   else report(error.message || 'Não foi possível carregar os atendimentos.');
 }
 async function refresh(append=false) {
@@ -263,7 +266,14 @@ function resetDemo() {
   const login=node('button','Acesso do setor →','text-button');login.type='button';login.addEventListener('click',openLogin);$('#mode-banner').append(login);
   render(); loading=false;refresh();
 }
-function signOut() {document.querySelectorAll('dialog[open]').forEach(d=>d.close());newForm.reset();$('#login-form').reset();$('#case-summary').replaceChildren();$('#case-history').replaceChildren();$('#case-title').textContent='';$('#case-checks').replaceChildren();resetDemo();}
+function signOut(message='') {
+  sessionGuard.stop();document.querySelectorAll('dialog[open]').forEach(d=>d.close());newForm.reset();$('#login-form').reset();
+  $('#case-summary').replaceChildren();$('#case-history').replaceChildren();$('#case-title').textContent='';$('#case-checks').replaceChildren();resetDemo();
+  if(configured&&!publicDemo){
+    $('#demo-controls').hidden=true;$('#mode-banner').replaceChildren(node('span','Acesso protegido · Entre com uma conta individual autorizada.'));
+    openLogin();$('#login-error').textContent=message;
+  }
+}
 $('#reset-demo').addEventListener('click',()=>{resetDemo();report('Todos os testes foram apagados. A demonstração está vazia novamente.');});
 newForm.elements.articulacao.addEventListener('change',()=>{
   const other=newForm.elements.articulacao.value==='Outra articulação';
@@ -435,24 +445,32 @@ batchForm.addEventListener('submit',async event=>{
 });
 $('#print-batch').addEventListener('click',()=>{if(lastBatch&&$('#print-sheet').children.length)window.print();});
 function openLogin() {
-  $('#login-note').textContent=configured?'Entre com a conta autorizada do setor. A sessão permanece somente nesta aba.':'O painel público está em modo demonstração. O acesso do setor depende da configuração do banco e da liberação dos usuários.';
-  $('#login-form').hidden=!configured;$('#login-error').textContent='';$('#login-dialog').showModal();
+  $('#login-note').textContent=configured?'Entre com sua conta individual. A sessão fica somente nesta aba e é bloqueada após 15 minutos sem uso.':'O painel público está em modo demonstração. O acesso do setor depende da configuração do banco e da liberação dos usuários.';
+  const locked=configured&&!publicDemo&&!(store instanceof ApiStore);
+  $('#login-form').hidden=!configured;$('#login-error').textContent='';$('#login-dialog [data-close]').hidden=locked;
+  if(!$('#login-dialog').open)$('#login-dialog').showModal();
 }
 $('#entrar-equipe').addEventListener('click',openLogin);
+$('#login-dialog').addEventListener('cancel',event=>{if(configured&&!publicDemo&&!(store instanceof ApiStore))event.preventDefault();});
 $('#login-form').addEventListener('submit',async e=>{
   e.preventDefault();const run=++epoch;$('#login-button').disabled=true;
-  const form=e.currentTarget;
+  const form=e.currentTarget;let api;
   try {
     const response=await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${encodeURIComponent(config.firebaseApiKey)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:form.elements.email.value.trim(),password:form.elements.password.value,returnSecureToken:true}),signal:AbortSignal.timeout(12000)});
     form.elements.password.value='';
     if(!response.ok)throw new Error('Não foi possível entrar. Confira o e-mail e a senha da equipe.');
-    const credentials=await response.json(),api=new ApiStore(config,credentials.idToken),user=await api.session(),references=await api.references();if(run!==epoch){api.clear();return;}
+    const credentials=await response.json();api=new ApiStore(config,credentials);const user=await api.session(),references=await api.references();if(run!==epoch){api.clear();return;}
     fillOptions(document,references,true);
     store=api;records=[];cursor=null;selected=null;filter='all';$('#search').value='';$('#only-pending').checked=false;$('#demo-controls').hidden=true;
     $('#mode-banner').replaceChildren(node('span',`Painel da equipe · ${ROLES[user.role]}`));
     const logout=node('button','Sair da equipe','text-button');logout.type='button';logout.addEventListener('click',()=>{signOut();report('Sessão encerrada.');});$('#mode-banner').append(logout);
-    $('#login-dialog').close();report('');render();loading=false;await refresh();
-  }catch(error){if(run===epoch)$('#login-error').textContent=error.message || 'Não foi possível iniciar a sessão.';}
+    $('#login-dialog').close();sessionGuard.start();report('');render();loading=false;await refresh();
+  }catch(error){api?.clear();if(run===epoch)$('#login-error').textContent=error.message || 'Não foi possível iniciar a sessão.';}
   finally{$('#login-button').disabled=false;form.elements.password.value='';}
 });
+for(const eventName of ['pointerdown','keydown','touchstart'])document.addEventListener?.(eventName,()=>{if(store instanceof ApiStore)sessionGuard.touch();},{passive:true});
+document.addEventListener?.('visibilitychange',()=>{if(!document.hidden&&store instanceof ApiStore)sessionGuard.check();});
 refresh();
+if(configured&&!publicDemo){
+  $('#demo-controls').hidden=true;$('#mode-banner').replaceChildren(node('span','Acesso protegido · Entre com uma conta individual autorizada.'));openLogin();
+}

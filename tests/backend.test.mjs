@@ -19,6 +19,7 @@ function fixture() {
   db.exec(readFileSync(new URL('../migrations/0003_patients.sql',import.meta.url),'utf8'));
   db.exec(readFileSync(new URL('../migrations/0004_patient_audit.sql',import.meta.url),'utf8'));
   db.exec(readFileSync(new URL('../migrations/0005_daily_queue_and_batches.sql',import.meta.url),'utf8'));
+  db.exec(readFileSync(new URL('../migrations/0006_security_hardening.sql',import.meta.url),'utf8'));
   const binding={
     prepare(sql){return {bind(...args){return {sql,args,async first(){return db.prepare(sql).get(...args)||null;},async all(){return {results:db.prepare(sql).all(...args)};}};}}},
     async batch(statements){db.exec('BEGIN');try{const results=statements.map(({sql,args})=>({meta:db.prepare(sql).run(...args)}));db.exec('COMMIT');return results;}catch(error){db.exec('ROLLBACK');throw error;}}
@@ -31,6 +32,7 @@ test('nega origem não autorizada e não toca na autenticação',async()=>{
 });
 test('preflight permitido e respostas de dados não são cacheáveis',async()=>{
   const r=await handle(request('/cases','OPTIONS'),env);assert.equal(r.status,204);assert.equal(r.headers.get('Access-Control-Allow-Origin'),'https://clinic.example');assert.equal(r.headers.get('Cache-Control'),'no-store');
+  assert.equal(r.headers.get('X-Frame-Options'),'DENY');assert.equal(r.headers.get('Referrer-Policy'),'no-referrer');assert.match(r.headers.get('Content-Security-Policy'),/default-src 'none'/);
 });
 test('ninguém consulta casos sem token',async()=>{
   const r=await handle(request('/cases','GET',undefined,{Authorization:''}),env);assert.equal(r.status,401);
@@ -67,7 +69,7 @@ test('API grava, consulta, confere, encaminha e recebe usando SQL real',async()=
   const {db,repository}=fixture(),deps={repository,authenticate:async()=>user};
   let response=await handle(request('/cases','POST',{id,fields}),env,deps);assert.equal(response.status,201);
   let record=await response.json();assert.equal(record.events.length,1);assert.equal(record.fields.atendente,'Maria Autorizações');
-  const patient=await (await handle(request('/patient?prontuario=10021'),env,deps)).json();assert.deepEqual(patient.patient,{prontuario:'10021',paciente:'Paciente fictício',convenio:'Particular'});
+  const patient=await (await handle(request('/patient/lookup','POST',{prontuario:'10021'}),env,deps)).json();assert.deepEqual(patient.patient,{prontuario:'10021',paciente:'Paciente fictício',convenio:'Particular'});
   for(const stage of ['solicitado','autorizado','agendado','realizado','conferencia','pronto_faturamento']) {
     const checks=stage==='pronto_faturamento'?all:record.checks;
     response=await handle(request('/cases/'+id,'PATCH',{version:record.version,stage,checks,fields:{numeroGuia:'GUIA-100',dataAgendamento:'2026-01-01',dataAplicacao:'2026-01-01',observacao:'',condicaoProcesso:'regular'}}),env,deps);
@@ -91,6 +93,16 @@ test('não abre duas guias ativas para a mesma articulação, lado e aplicação
   const secondId='10000000-0000-4000-8000-000000000088';
   const response=await handle(request('/cases','POST',{id:secondId,fields}),env,deps);
   assert.equal(response.status,409);assert.match((await response.json()).error,/processo ativo/);assert.equal((await repository.list()).items.length,1);db.close();
+});
+test('banco também impede duplicidade criada por duas correções simultâneas',async()=>{
+  const {db,repository}=fixture(),deps={repository,authenticate:async()=>user};
+  await handle(request('/cases','POST',{id,fields}),env,deps);
+  const secondId='10000000-0000-4000-8000-000000000086';
+  let response=await handle(request('/cases','POST',{id:secondId,fields:{...fields,articulacao:'Ombro',aplicacao:'1ª aplicação · Ombro direito'}}),env,deps);assert.equal(response.status,201);
+  const second=await response.json();
+  response=await handle(request('/cases/'+secondId,'PATCH',{version:second.version,fields:{articulacao:'Joelho',lado:'Direito',numeroAplicacao:'1'}}),env,deps);
+  assert.equal(response.status,409);assert.match((await response.json()).error,/outro processo ativo/);
+  assert.ok(db.prepare("SELECT name FROM sqlite_schema WHERE name = 'idx_cases_active_process'").get());db.close();
 });
 test('cancelamento encerra uma guia e permite um novo processo futuro',async()=>{
   const {db,repository}=fixture(),deps={repository,authenticate:async()=>user};
@@ -131,7 +143,7 @@ test('paginação cobre 102 registros sem perdas e ordena pelos mais recentes',a
   const {db,repository}=fixture();
   for(let i=0;i<102;i++) {
     const at=new Date(Date.UTC(2026,0,1,0,i)).toISOString();
-    db.prepare(SQL.create).run(crypto.randomUUID(),JSON.stringify(fields),'autorizacao','recebido','recebido',JSON.stringify(emptyChecks()),at,at,at,user.uid);
+    db.prepare(SQL.create).run(crypto.randomUUID(),JSON.stringify({...fields,prontuario:`P${String(i).padStart(3,'0')}`}),'autorizacao','recebido','recebido',JSON.stringify(emptyChecks()),at,at,at,user.uid);
   }
   const first=await repository.list(),second=await repository.list(first.nextCursor);
   assert.equal(first.items.length,100);assert.equal(second.items.length,2);assert.equal(second.nextCursor,null);

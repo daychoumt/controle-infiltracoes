@@ -4,11 +4,11 @@ O backend deste projeto é independente do Finance AI. O site público permite e
 
 ## 1. Identidade da clínica
 
-Use um projeto Firebase dedicado à clínica. Ative o provedor **E-mail/senha** em Authentication e crie as contas da equipe pelo console. Não há cadastro público na interface.
+Use um projeto Firebase dedicado à clínica. Ative o provedor **E-mail/senha** em Authentication, configure uma política de senha forte e crie uma conta individual para cada pessoa pelo console. Não há cadastro público na interface e contas compartilhadas não devem ser utilizadas.
 
 Anote o ID do projeto, a configuração Web de API e os UIDs dos usuários. A configuração Web identifica o projeto; as permissões de consulta são verificadas pelo Worker. Não coloque credenciais de conta de serviço no frontend.
 
-Cada requisição envia o ID token ao endpoint oficial `accounts:lookup` do Firebase. O servidor confere projeto, expiração, usuário, conta desativada, revogação da sessão e liberação na equipe. A sessão do frontend fica somente na memória da aba, sem cookies ou `localStorage`. Após expirar, entre novamente.
+Cada requisição envia o ID token ao endpoint oficial `accounts:lookup` do Firebase. O servidor confere projeto, expiração, usuário, conta desativada, revogação da sessão e liberação na equipe. Tokens e renovação ficam somente na memória da aba, sem cookies ou `localStorage`; a tela bloqueia após 15 minutos sem atividade. O usuário ativo recebe uma renovação de token em memória e uma sessão recusada pelo servidor nunca é reaproveitada.
 
 ## 2. Banco e Worker na Cloudflare
 
@@ -23,9 +23,9 @@ Em `wrangler.jsonc`, substitua:
 
 - `database_id` pelo ID retornado ao criar o D1;
 - `FIREBASE_PROJECT_ID` e `FIREBASE_WEB_API_KEY` pela configuração do projeto da clínica;
-- `ALLOWED_ORIGINS` pelas origens exatas do site, sem caminho ou barra no final. O domínio atual já está no exemplo.
+- `ALLOWED_ORIGINS` pela origem exata do site, sem caminho ou barra no final. Em produção mantenha somente o domínio atual do painel. Não libere `*`, GitHub Pages alternativo ou `localhost` no Worker da clínica.
 
-O arquivo ativo está ignorado pelo Git para não publicar configurações operacionais por acidente. Mantenha o nome do binding **DB**. Não reutilize o Worker do Finance AI.
+O arquivo ativo está ignorado pelo Git para não publicar configurações operacionais por acidente. Mantenha o nome do binding **DB**. Não reutilize o Worker do Finance AI. Se precisar testar localmente, use outro Worker e outro banco de homologação em vez de ampliar as origens do ambiente clínico.
 
 Valide e aplique as migrações primeiro localmente, depois no banco remoto vazio:
 
@@ -49,6 +49,8 @@ Cole um objeto JSON com os UIDs reais quando a ferramenta pedir o valor. Exemplo
 ```
 
 No painel Cloudflare, a alternativa é **Configurações → Variáveis e segredos → Adicionar**, nome `STAFF_ROLES`, tipo **Segredo**. Sem essa lista, todo usuário é recusado, inclusive quem acabou de criar uma conta no Firebase. Mantenha apenas os acessos necessários.
+
+Use `recepcao` para o setor de autorizações e `admin` somente para quem administra o sistema. Ao desligar ou transferir alguém, desative a conta no Firebase, remova o UID de `STAFF_ROLES` e publique uma nova versão do segredo no mesmo dia.
 
 Cadastre também as listas operacionais como segredo, para que médicos, convênios e medicamentos não fiquem expostos no GitHub público:
 
@@ -75,7 +77,9 @@ export const config = Object.freeze({
 });
 ```
 
-Use a origem do Worker, sem `/cases` no final. O painel deve ser acessado por HTTPS em produção. Publique a alteração pelo GitHub Pages. A página continua abrindo na demonstração; **Acesso do setor** permite entrar no banco real. Sair limpa os registros exibidos e retorna aos exemplos.
+Use a origem do Worker, sem `/cases` no final. O painel deve ser acessado por HTTPS em produção. Publique a alteração pelo GitHub Pages. Depois dessa configuração, `painel.html` abre bloqueado no login do setor. A demonstração pública continua disponível somente quando solicitada com `painel.html?demo=1`; ela permanece vazia e não acessa o banco. Sair ou atingir 15 minutos sem atividade remove os dados exibidos e volta à tela protegida.
+
+A Política de Segurança de Conteúdo da página permite conexão com endereços `workers.dev`. Se o Worker usar um domínio personalizado diferente, inclua essa origem explicitamente em `connect-src` no arquivo `painel.html` antes de publicar.
 
 Não coloque `STAFF_ROLES`, tokens, senhas ou dados de pacientes nesse arquivo. O segredo Gemini não é usado neste projeto.
 
@@ -96,6 +100,9 @@ Com registros fictícios e uma conta do setor:
 11. Abra o mesmo registro em duas sessões. Após uma salvar, a outra deve receber conflito e reabrir os detalhes.
 12. No histórico do paciente, use **Novo pedido deste paciente** e confirme que prontuário, nome e convênio são reaproveitados enquanto a nova articulação mantém guia e situação próprias.
 13. Saia do setor e verifique que os dados reais não permanecem na lista ou nos diálogos.
+14. Deixe a aba sem atividade por 15 minutos e confirme que o login é exigido novamente.
+15. Abra o histórico do navegador e confirme que o prontuário não aparece em nenhuma URL.
+16. Tente corrigir uma segunda guia para a mesma articulação, lado e aplicação; o banco deve recusar a duplicidade.
 
 O schema e os testes não criam pacientes no banco remoto. Defina também quem administra acessos, backups e correções cadastrais. A interface permite corrigir o perfil do paciente e os dados de cada infiltração de forma independente; registros encerrados permanecem no histórico e não são apagados.
 
@@ -107,7 +114,7 @@ Todas as rotas de dados exigem `Authorization: Bearer <ID_TOKEN>` e usuário lib
 | --- | --- |
 | `GET /session` | Perfil autorizado no servidor |
 | `GET /references` | Listas de convênios, medicamentos e médicos após autenticação |
-| `GET /patient?prontuario=...` | Perfil mínimo do paciente para reaproveitar nome e convênio no cadastro |
+| `POST /patient/lookup` | Perfil mínimo do paciente; o prontuário segue no corpo e não aparece na URL |
 | `PATCH /patient` | Corrige nome e convênio do perfil e atualiza todas as guias do prontuário |
 | `GET /cases` | Até 100 atendimentos, mais recentes primeiro, e cursor da próxima página |
 | `GET /cases?cursor=...` | Página seguinte; use o cursor retornado, sem montar manualmente |
@@ -129,6 +136,8 @@ O prontuário é a chave única da tabela `patients`. Joelho direito, joelho esq
 Reenviar um cadastro com o mesmo UUID, mesmos campos e mesmo usuário retorna o registro existente. Conflitos de versão retornam `409`. Atualização e evento são gravados juntos; uma falha no lote desfaz ambos. Não há repetição automática de mutações após falha de rede.
 
 As respostas usam `Cache-Control: no-store`. O corpo das requisições é limitado a 8 KiB. Erros externos, consultas SQL, credenciais e pacientes não são incluídos nos logs da aplicação. CORS restringe origens de navegador; a autenticação e a lista da equipe são os controles efetivos de acesso.
+
+O banco possui uma restrição única para processo ativo por prontuário, articulação, lado e aplicação. Ela funciona mesmo quando duas pessoas salvam ao mesmo tempo, além da verificação amigável feita pela API. Consulte também o [plano de segurança operacional](SECURITY.md).
 
 ## Referências
 

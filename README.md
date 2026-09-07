@@ -2,7 +2,7 @@
 
 Controle interno do setor de autorizações para acompanhar cada guia, do pedido recebido à entrega ao faturamento, sem depender de cadernos.
 
-**[Explorar a demonstração](https://xn--amotinfiltrao-7eb3d.online/painel.html)** · **[Formulário da clínica](https://xn--amotinfiltrao-7eb3d.online/)** · **[Configurar o backend](docs/BACKEND.md)**
+**[Explorar a demonstração](https://xn--amotinfiltrao-7eb3d.online/painel.html?demo=1)** · **[Painel da clínica](https://xn--amotinfiltrao-7eb3d.online/)** · **[Configurar o backend](docs/BACKEND.md)** · **[Segurança operacional](docs/SECURITY.md)**
 
 ## O problema
 
@@ -51,6 +51,9 @@ A demonstração é interativa, mas não grava dados em servidores ou no armazen
 | Backend | API em Cloudflare Workers, autenticação Firebase e banco SQL D1 |
 | Concorrência | Versão esperada por atualização; registro e evento gravados na mesma transação |
 | Acesso | API nega usuários fora da lista de equipe, mesmo que tenham login válido |
+| Sessão protegida | Tokens ficam somente na memória, são apagados ao sair e a tela bloqueia após 15 minutos sem uso |
+| Privacidade no navegador | Prontuários seguem no corpo da requisição, formulários clínicos não usam preenchimento automático e o painel pede para não ser indexado |
+| Integridade concorrente | O banco impede processos ativos duplicados mesmo quando duas pessoas salvam ao mesmo tempo |
 | Cadastros auxiliares | Listas reais de médicos, convênios e medicamentos ficam no backend; a demonstração usa exemplos fictícios |
 | Qualidade | Testes automatizados de fluxo, segurança, banco, concorrência e lotes no GitHub Actions |
 
@@ -58,7 +61,7 @@ A demonstração é interativa, mas não grava dados em servidores ou no armazen
 
 - **Entrada principal:** o endereço inicial abre o painel. O formulário público antigo e seu endpoint de notificação não participam mais do fluxo.
 - **Painel público:** demonstração independente com dados fictícios, sem acesso a pacientes da clínica.
-- **Painel da equipe:** código implementado, mas acesso real depende de criar o D1, configurar um projeto Firebase da clínica e liberar os usuários no Worker. A configuração pública está vazia por padrão.
+- **Painel da equipe:** código implementado, mas acesso real depende de criar o D1, configurar um projeto Firebase da clínica e liberar individualmente os usuários no Worker. A configuração pública está vazia por padrão.
 
 O painel não envia e-mails. O banco protegido é a fonte principal e a impressão usa os dados já cadastrados sem alterar os registros. Uma planilha de backup só deve ser conectada depois que a clínica definir o arquivo oficial e quem poderá acessá-lo.
 
@@ -100,6 +103,6 @@ docs/        Configuração do backend
 
 Sem anexos, importação automática do Racimed ou decisões clínicas automatizadas. Como não existe integração disponível com o Racimed, o primeiro perfil ainda é manual; nos próximos processos, nome e convênio são recuperados pelo prontuário. Solicitação, autorização, recebimento da guia, conferência e envio ao faturamento ganham data automática. Agendamento, realização, retorno, condição e observação são informados quando ocorrerem.
 
-Nenhum dado real foi usado nos testes. A ativação para a clínica exige validar o fluxo e as permissões em um ambiente de homologação.
+Nenhum dado real foi usado nos testes. A ativação para a clínica exige validar fluxo, permissões, bloqueio de sessão, restauração de backup e rotina de desligamento de usuários em um ambiente de homologação. A direção da clínica deve aprovar quem acessa os dados e por quanto tempo eles serão mantidos.
 
 **Desenvolvido por [Thalys Daychoum](https://github.com/daychoumt)** · JavaScript, interfaces web e automação de processos.

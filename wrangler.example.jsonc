@@ -5,7 +5,7 @@
   "compatibility_date": "2026-09-01",
   "workers_dev": true,
   "vars": {
-    "ALLOWED_ORIGINS": "https://xn--amotinfiltrao-7eb3d.online,https://daychoumt.github.io,http://localhost:8080",
+    "ALLOWED_ORIGINS": "https://xn--amotinfiltrao-7eb3d.online",
     "FIREBASE_PROJECT_ID": "SUBSTITUIR_PELO_PROJETO_DA_CLINICA",
     "FIREBASE_WEB_API_KEY": "SUBSTITUIR_PELA_CONFIGURACAO_WEB_DO_FIREBASE"
   },

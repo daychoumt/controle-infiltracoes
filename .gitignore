@@ -4,4 +4,22 @@ wrangler.jsonc
 .dev.vars*
 .env*
 *.sqlite*
+*.db
+*.db-*
 coverage/
+
+# Credenciais e chaves locais
+*.pem
+*.key
+*.p12
+*.pfx
+service-account*.json
+firebase-admin*.json
+secrets*.json
+credentials*.json
+
+# Arquivos locais do sistema operacional/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

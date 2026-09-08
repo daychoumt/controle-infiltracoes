@@ -14,9 +14,9 @@ O projeto evoluiu de um formulário isolado para uma interface única do setor d
 
 1. Abra o painel. A demonstração começa vazia para você testar o fluxo desde o primeiro cadastro.
 2. Selecione **Cadastrar primeiro paciente** e use somente informações fictícias.
-3. Escolha 1ª, 2ª ou 3ª aplicação, articulação, lado e uma condição como falta de carimbo ou ressonância aguardando envio.
+3. Escolha 1ª, 2ª ou 3ª aplicação, articulação e lado; registre os documentos que chegaram ao setor.
 4. Abra a guia criada e use **Novo pedido deste paciente** para cadastrar outra articulação sem repetir prontuário, nome e convênio.
-5. Informe o número da guia, o agendamento e a realização; as demais datas são registradas automaticamente pelos botões de ação.
+5. Percorra as cinco fases: entrada, autorização, recepção, procedimento e conferência/faturamento. O painel mostra o que falta antes de cada avanço.
 6. Conclua a conferência, abra **Entregar ao faturamento** e gere um lote por convênio com protocolo imprimível.
 7. Abra **Relatórios** para testar as relações mensais de movimento, pendências e entregas.
 
@@ -29,11 +29,15 @@ A demonstração é interativa, mas não grava dados em servidores ou no armazen
 | Entrada única | O endereço principal abre o controle; o formulário antigo que disparava e-mail não é mais utilizado pelo site |
 | Perfil único | O prontuário identifica um único paciente e reaproveita nome e convênio nos próximos processos |
 | Cadastro operacional | Prontuário Racimed, paciente, convênio, pedido, médico, articulação, lado, sequência e data do pedido |
+| Fluxo visual | Cinco fases iguais às da rotina: entrada → autorização → agendamento/recepção → procedimento → conferência/faturamento |
+| Documentos de entrada | Confirma pedido médico, carteirinha e documento; acompanha CID e exame/laudo antes de solicitar |
 | Regra da guia | Cada combinação de articulação e lado é registrada como uma guia independente |
 | Trabalho do dia | Prioriza pendências, retornos de hoje e guias atrasadas antes das demais filas |
 | Prazo operacional | Conta os dias desde a última mudança de etapa e utiliza a próxima data de acompanhamento quando informada |
 | Acompanhamento | Autorizações e pós-procedimento ficam em blocos distintos; pesquisa também por pedido do Racimed e médico |
-| Conferência | Guia autorizada, guia assinada, execução e documentação conferidas |
+| Autorização | Guarda número da guia, senha ou protocolo, validade, situação na operadora e quantidades solicitada/autorizada |
+| Recepção | Registra responsável, retirada e devolução do processo físico e qualquer pendência encontrada |
+| Conferência | Sete pontos críticos: autorização, validade, assinaturas, execução, documentos, compatibilidade e registro completo |
 | Ações simples | Enviar à operadora → autorizar → agendar → realizar → receber guia → conferir → incluir no lote |
 | Fluxo completo | Pedido recebido → na operadora → autorizado → agendado → realizado → conferência → pronto → entregue |
 | Pendências | Correções aparecem como alerta separado e impedem avanço até serem resolvidas |
@@ -47,6 +51,7 @@ A demonstração é interativa, mas não grava dados em servidores ou no armazen
 | Lote de faturamento | Reúne somente guias prontas do mesmo convênio, registra quem recebeu e encerra todas juntas |
 | Relatórios mensais | Movimento completo, pendências ou entregas; folhas A4 separadas por convênio |
 | Protocolo impresso | Número único do lote, competência, responsáveis, guias entregues e campos de assinatura |
+| Ficha da recepção | Folha rápida para grampear ao processo, com horários, checklist e orientação de devolução ao setor |
 | Relação impressa | Paciente, prontuário, guia, médico, articulação, lado, aplicação, datas do pedido/realização/faturamento, situação e pendências |
 | Backend | API em Cloudflare Workers, autenticação Firebase e banco SQL D1 |
 | Concorrência | Versão esperada por atualização; registro e evento gravados na mesma transação |

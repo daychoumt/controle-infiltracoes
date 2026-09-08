@@ -45,7 +45,7 @@ async function panel(source,config={apiUrl:'',firebaseApiKey:''},search='') {
   context.panelTest.setSource(source);
   return {...context.panelTest,get current(){return context.panelTest.selected;},$,api:context.panelTest};
 }
-const fields={prontuario:'PILOTO-01',paciente:'Paciente fictício do piloto',convenio:'Particular',medicacao:'',executor:'Dr. Exemplo A',articulacao:'Joelho',lado:'Direito',numeroAplicacao:'1',dataPedido:'2026-01-01',dataAgendamento:'2026-01-10',dataAplicacao:'',numeroGuia:'GUIA-PILOTO',condicaoProcesso:'regular'};
+const fields={prontuario:'PILOTO-01',paciente:'Paciente fictício do piloto',convenio:'Particular',medicacao:'',executor:'Dr. Exemplo A',articulacao:'Joelho',lado:'Direito',numeroAplicacao:'1',dataPedido:'2026-01-01',dataAgendamento:'2026-01-10',dataAplicacao:'',numeroGuia:'GUIA-PILOTO',condicaoProcesso:'regular',pedidoMedicoRecebido:true,carteirinhaRecebida:true,documentoPacienteRecebido:true,cidStatus:'nao_aplica',exameStatus:'conferido',senhaAutorizacao:'SENHA-PILOTO',protocoloOperadora:'PROTOCOLO-PILOTO',validadeAutorizacao:'2026-12-31',quantidadeSolicitada:'1',quantidadeAutorizada:'1',recepcionista:'Recepcionista teste',dataHoraRetiradaRecepcao:'2026-01-10T08:00',pendenciaRecepcao:'sem_pendencia',quantidadeRealizada:'1'};
 async function readyForScheduling(source,overrides={}) {
   let record=await source.create({id:crypto.randomUUID(),fields:{...fields,...overrides}});
   for(const stage of ['solicitado','autorizado'])record=await source.update(record.id,{version:record.version,stage});

@@ -1,8 +1,8 @@
-import {STAGES,CHECKS,ROLES,WORKFLOW_FIELD_LABELS,emptyChecks,pending,nextStage,canEdit,canReviewCheck,localDate,applicationLabel,jointLabel,processLabel,attentionState,nextActionLabel} from './domain.js?v=13';
-import {$,node,fillOptions,closeDialogs,summary,displayDate} from './ui.js?v=13';
-import {DemoStore,ApiStore} from './store.js?v=13';
-import {SessionGuard} from './session.js?v=13';
-import {config} from './config.js?v=13';
+import {STAGES,MACRO_PHASES,CHECKS,ROLES,WORKFLOW_FIELD_LABELS,emptyChecks,pending,nextStage,canEdit,canReviewCheck,localDate,localDateTime,macroPhase,hasOperationalPending,applicationLabel,jointLabel,processLabel,operatorLabel,receptionLabel,attentionState,nextActionLabel} from './domain.js?v=14';
+import {$,node,fillOptions,closeDialogs,summary,displayDate,displayDateTime} from './ui.js?v=14';
+import {DemoStore,ApiStore} from './store.js?v=14';
+import {SessionGuard} from './session.js?v=14';
+import {config} from './config.js?v=14';
 fillOptions();closeDialogs();
 let store=new DemoStore(),records=[],reportRecords=[],batches=[],cursor=null,filter='all',selected=null,epoch=0,busy=false,createId=null,loading=false,lastBatch=null;
 const configured=Boolean(config.apiUrl && config.firebaseApiKey);
@@ -37,19 +37,51 @@ const stageLabel=stage=>STAGES.find(([key])=>key===stage)?.[1] || 'Situação n�
 const applicationDate=fields=>fields.dataAplicacao || fields.data || '';
 const requestDate=fields=>fields.dataPedido || '';
 const billingDate=fields=>fields.dataFaturamento || '';
-const stageHints={all:'Visão geral',pendencia:'Corrigir antes de seguir',atrasada:'Prioridade do setor',hoje:'Retorno ou procedimento',recebido:'Conferir e solicitar',solicitado:'Acompanhar operadora',autorizado:'Providenciar agendamento',agendado:'Aguardar realização',realizado:'Recolher a guia',conferencia:'Conferir documentos',pronto_faturamento:'Incluir em um lote',faturamento:'Entrega registrada',cancelado:'Processo encerrado'};
+const stageHints={all:'Visão geral',pendencia:'Corrigir antes de seguir',atrasada:'Prioridade do setor',hoje:'Retorno ou procedimento',entrada:'Documentos de entrada',autorizacao:'Operadora e autorização',recepcao:'Agendamento e processo físico',procedimento:'Execução e retorno',faturamento:'Conferência e entrega'};
+function matchesFilter(record,key) {
+  if(key==='all')return true;
+  if(['pendencia','atrasada','hoje'].includes(key))return attentionState(record).key===key;
+  if(key.startsWith('phase-'))return macroPhase(record.stage)?.id===key.slice(6);
+  return record.stage===key;
+}
 const actionInstructions={
-  recebido:['Enviar pedido à operadora','Depois de conferir o pedido, registre o envio para iniciar o acompanhamento da autorização.'],
-  solicitado:['Registrar autorização','Informe o número da guia quando a operadora autorizar o procedimento.'],
-  autorizado:['Registrar agendamento','Informe a data agendada e confirme. Essa data não registra a realização.'],
-  agendado:['Aguardar o procedimento','O agendamento já está salvo. Registre a realização somente depois que a infiltração acontecer.'],
-  realizado:['Receber a guia assinada','Quando a guia assinada voltar ao setor, registre o recebimento para iniciar a conferência.'],
-  conferencia:['Concluir a conferência','Marque os itens realmente conferidos. A guia só ficará pronta quando os quatro estiverem completos.'],
+  recebido:['Enviar pedido à operadora','Confirme os três documentos de entrada e resolva qualquer CID ou exame pendente.'],
+  solicitado:['Registrar autorização','Preencha guia, senha ou protocolo, validade e quantidade autorizada.'],
+  autorizado:['Registrar agendamento','Informe a data agendada dentro da validade da autorização.'],
+  agendado:['Registrar realização','Informe a realização e registre quem retirou o processo na recepção.'],
+  realizado:['Receber processo da recepção','A devolução será registrada agora; depois faça a conferência final no setor.'],
+  conferencia:['Concluir a conferência','Marque cada item realmente conferido. Todos são obrigatórios antes do faturamento.'],
   pronto_faturamento:['Entregar em lote','Adicione a guia a um lote do mesmo convênio e imprima o protocolo de entrega.']
 };
 function caseFormState() {
   return {
-    fields:{numeroGuia:$('#case-guide').value.trim(),dataAgendamento:$('#case-scheduled-date').value,dataAplicacao:$('#case-date').value,retornoEm:$('#case-followup').value,condicaoProcesso:$('#case-condition').value,observacao:$('#case-observation').value},
+    fields:{
+      pedidoMedicoRecebido:$('#case-request-document').checked,
+      carteirinhaRecebida:$('#case-card-document').checked,
+      documentoPacienteRecebido:$('#case-patient-document').checked,
+      cidStatus:$('#case-cid-status').value,
+      exameStatus:$('#case-exam-status').value,
+      numeroGuia:$('#case-guide').value.trim(),
+      senhaAutorizacao:$('#case-authorization-password').value.trim(),
+      protocoloOperadora:$('#case-operator-protocol').value.trim(),
+      situacaoOperadora:$('#case-operator-status').value,
+      quantidadeSolicitada:$('#case-requested-quantity').value,
+      quantidadeAutorizada:$('#case-authorized-quantity').value,
+      validadeAutorizacao:$('#case-authorization-expiry').value,
+      autorizacaoSemValidade:$('#case-no-expiry').checked,
+      dataAgendamento:$('#case-scheduled-date').value,
+      dataAplicacao:$('#case-date').value,
+      retornoEm:$('#case-followup').value,
+      recepcionista:$('#case-receptionist').value.trim(),
+      dataHoraRetiradaRecepcao:$('#case-reception-pickup').value,
+      dataHoraRetornoAutorizacao:$('#case-reception-return').value,
+      pendenciaRecepcao:$('#case-reception-pending').value,
+      observacaoRecepcao:$('#case-reception-observation').value,
+      quantidadeRealizada:$('#case-performed-quantity').value,
+      materiaisUtilizados:$('#case-materials').value,
+      condicaoProcesso:$('#case-condition').value,
+      observacao:$('#case-observation').value
+    },
     checks:Object.fromEntries([...$('#case-checks').querySelectorAll('input')].map(input=>[input.name,input.checked]))
   };
 }
@@ -58,13 +90,27 @@ function advanceReadiness(record=selected) {
   const next=nextStage(record.stage),{fields,checks}=caseFormState(),today=localDate();
   if(!next)return {ready:false,message:'Este processo já chegou à última etapa.'};
   if(fields.condicaoProcesso!=='regular')return {ready:false,message:'Resolva a pendência e altere a situação da documentação para “Sem pendência” antes de avançar.',focus:'#case-condition'};
+  if(record.stage==='recebido') {
+    const missing=[[fields.pedidoMedicoRecebido,'pedido médico'],[fields.carteirinhaRecebida,'carteirinha'],[fields.documentoPacienteRecebido,'documento do paciente']].filter(([done])=>!done).map(([,label])=>label);
+    if(missing.length)return {ready:false,message:'Confirme antes de enviar: '+missing.join(', ')+'.',focus:'#case-request-document'};
+    if(fields.cidStatus==='pendente'||fields.exameStatus==='pendente')return {ready:false,message:'Resolva o CID ou o exame marcado como pendente antes de enviar.',focus:fields.cidStatus==='pendente'?'#case-cid-status':'#case-exam-status'};
+  }
   if(record.stage==='solicitado'&&!fields.numeroGuia)return {ready:false,message:'Informe o número da guia autorizada para registrar a autorização.',focus:'#case-guide'};
+  if(record.stage==='solicitado'&&!fields.senhaAutorizacao&&!fields.protocoloOperadora)return {ready:false,message:'Informe a senha da autorização ou o protocolo da operadora.',focus:'#case-authorization-password'};
+  if(record.stage==='solicitado'&&!fields.validadeAutorizacao&&!fields.autorizacaoSemValidade)return {ready:false,message:'Informe a validade ou marque que ela não foi informada.',focus:'#case-authorization-expiry'};
+  if(record.stage==='solicitado'&&fields.validadeAutorizacao<today&&!fields.autorizacaoSemValidade)return {ready:false,message:'A autorização informada já está vencida. Confira a validade antes de avançar.',focus:'#case-authorization-expiry'};
+  if(record.stage==='solicitado'&&!fields.quantidadeAutorizada)return {ready:false,message:'Informe a quantidade autorizada.',focus:'#case-authorized-quantity'};
   if(record.stage==='autorizado'&&!fields.dataAgendamento)return {ready:false,message:'Informe a data agendada. Depois clique em “Registrar agendamento”.',focus:'#case-scheduled-date'};
   if(record.stage==='autorizado'&&fields.dataAgendamento<requestDate(record.fields))return {ready:false,message:'A data agendada não pode ser anterior à data do pedido.',focus:'#case-scheduled-date'};
+  if(record.stage==='autorizado'&&fields.validadeAutorizacao&&fields.dataAgendamento>fields.validadeAutorizacao)return {ready:false,message:'A data agendada ultrapassa a validade da autorização.',focus:'#case-scheduled-date'};
   if(record.stage==='agendado'&&!fields.dataAplicacao)return {ready:false,message:'Agendamento já registrado. Depois que a infiltração acontecer, informe a data da realização.',focus:'#case-date'};
   if(record.stage==='agendado'&&fields.dataAplicacao>today)return {ready:false,message:'A realização não pode ser registrada com uma data futura. Mantenha a guia como agendada.',focus:'#case-date'};
   if(record.stage==='agendado'&&fields.dataAplicacao<requestDate(record.fields))return {ready:false,message:'A data da realização não pode ser anterior à data do pedido.',focus:'#case-date'};
+  if(record.stage==='agendado'&&!fields.recepcionista)return {ready:false,message:'Informe qual recepcionista retirou o processo.',focus:'#case-receptionist'};
+  if(record.stage==='agendado'&&!fields.dataHoraRetiradaRecepcao)return {ready:false,message:'Registre a data e a hora em que a recepção retirou o processo.',focus:'#case-reception-pickup'};
+  if(record.stage==='agendado'&&fields.quantidadeRealizada&&fields.quantidadeAutorizada&&Number(fields.quantidadeRealizada)>Number(fields.quantidadeAutorizada))return {ready:false,message:'A quantidade realizada não pode ser maior que a quantidade autorizada.',focus:'#case-performed-quantity'};
   if(record.stage==='conferencia') {
+    if(fields.pendenciaRecepcao!=='sem_pendencia')return {ready:false,message:'Resolva a pendência que voltou da recepção antes de liberar para o faturamento.',focus:'#case-reception-pending'};
     const missing=Object.entries(CHECKS).filter(([key])=>!checks[key]).map(([,label])=>label);
     if(missing.length)return {ready:false,message:`Ainda falta conferir: ${missing.join(', ')}.`,focus:'#case-checks input:not(:checked):not(:disabled)'};
   }
@@ -83,8 +129,8 @@ function advanceSuccess(previousStage,record) {
     recebido:'Pedido registrado como enviado à operadora. O processo agora está em análise.',
     solicitado:'Autorização registrada. Agora informe quando a infiltração será agendada.',
     autorizado:`Agendamento registrado para ${displayDate(record.fields.dataAgendamento)}. A próxima etapa será registrar a realização depois do procedimento.`,
-    agendado:`Realização registrada em ${displayDate(applicationDate(record.fields))}. Agora aguarde a guia assinada voltar ao setor.`,
-    realizado:'Recebimento da guia assinada registrado. Faça a conferência da documentação.',
+    agendado:`Realização registrada em ${displayDate(applicationDate(record.fields))}. Agora aguarde o processo físico voltar ao setor.`,
+    realizado:'Devolução ao setor de autorizações registrada. Faça a conferência final da guia.',
     conferencia:'Conferência concluída. A guia está pronta para entrar no lote de faturamento.'
   })[previousStage] || 'Etapa atualizada e registrada no histórico.';
 }
@@ -94,33 +140,33 @@ function render() {
   const filters=$('#stage-filters');filters.replaceChildren();
   const groups=[
     ['Prioridades de hoje','Comece por estas filas',[['all','Todas'],['pendencia','Com pendência'],['atrasada','Atrasadas'],['hoje','Para hoje']]],
-    ['Autorizações','Do recebimento ao agendamento',STAGES.slice(0,4)],
-    ['Pós-procedimento','Da realização à entrega',STAGES.slice(4)]
+    ['Fluxo completo','Da entrada ao faturamento',MACRO_PHASES.map(phase=>['phase-'+phase.id,phase.number+'. '+phase.label])]
   ];
   for(const [title,hint,items] of groups) {
     const group=node('section',null,'filter-group'),heading=node('div',null,'filter-group-heading'),grid=node('div',null,'filter-grid');
     heading.append(node('h3',title),node('p',hint));group.append(heading,grid);
     for(const [key,label] of items) {
-      const count=key==='all' ? records.length : ['pendencia','atrasada','hoje'].includes(key) ? records.filter(r=>attentionState(r).key===key).length : records.filter(r=>r.stage===key).length;
-      const button=node('button',null,`filter status-${key}`);button.type='button';button.setAttribute('aria-pressed',String(filter===key));button.append(node('span',label),node('strong',count),node('small',stageHints[key]));
+      const count=records.filter(record=>matchesFilter(record,key)).length;
+      const hintKey=key.startsWith('phase-')?key.slice(6):key;
+      const button=node('button',null,`filter status-${hintKey}`);button.type='button';button.setAttribute('aria-pressed',String(filter===key));button.append(node('span',label),node('strong',count),node('small',stageHints[hintKey]));
       button.addEventListener('click',()=>{filter=key;render();filters.querySelector('[aria-pressed="true"]')?.focus();});grid.append(button);
     }
     filters.append(group);
   }
   const query=normalize($('#search').value.trim());
-  const visible=records.filter(r=>(filter==='all'||(['pendencia','atrasada','hoje'].includes(filter)?attentionState(r).key===filter:r.stage===filter)) && (!$('#only-pending').checked||r.fields.pendencia) && normalize([r.fields.paciente,r.fields.prontuario,r.fields.numeroGuia,r.fields.pedidoRacimed,r.fields.executor,r.fields.convenio,r.fields.articulacao,r.fields.loteReferencia,processLabel(r.fields),r.fields.observacao,r.id].filter(Boolean).join(' ')).includes(query));
+  const visible=records.filter(r=>matchesFilter(r,filter) && (!$('#only-pending').checked||hasOperationalPending(r)) && normalize([r.fields.paciente,r.fields.prontuario,r.fields.numeroGuia,r.fields.senhaAutorizacao,r.fields.protocoloOperadora,r.fields.pedidoRacimed,r.fields.executor,r.fields.convenio,r.fields.articulacao,r.fields.recepcionista,r.fields.loteReferencia,processLabel(r.fields),operatorLabel(r.fields),receptionLabel(r.fields),r.fields.observacao,r.id].filter(Boolean).join(' ')).includes(query));
   const tbody=$('#cases');tbody.replaceChildren();
   for(const record of visible) {
     const tr=node('tr'),patient=node('td');patient.append(node('strong',record.fields.paciente),node('small',record.fields.prontuario ? `Prontuário ${record.fields.prontuario}` : record.id.startsWith('demo-')?record.id.toUpperCase():'AM-'+record.id.slice(0,8).toUpperCase()));
     const joint=node('td',jointLabel(record.fields));joint.append(node('small',record.fields.pedidoRacimed ? `Pedido ${record.fields.pedidoRacimed}` : 'Uma guia para esta articulação'));
     const guide=node('td');guide.append(node('strong',record.fields.numeroGuia || 'Número ainda não informado'),node('small',`${applicationLabel(record.fields)} · Pedido ${requestDate(record.fields)?displayDate(requestDate(record.fields)):'sem data'}`),node('small',applicationDate(record.fields)?`Realizada em ${displayDate(applicationDate(record.fields))}`:'Realização ainda não informada'));
-    const attention=attentionState(record),stage=node('td');stage.append(node('span',stageLabel(record.stage),'pill '+record.stage));if(record.fields.pendencia)stage.append(node('small',`⚠ ${processLabel(record.fields)}`,'pending-note'));
+    const attention=attentionState(record),stage=node('td');stage.append(node('span',stageLabel(record.stage),'pill '+record.stage));if(hasOperationalPending(record))stage.append(node('small',`⚠ ${attention.label}`,'pending-note'));
     const nextAction=node('td');nextAction.append(node('strong',nextActionLabel(record.stage)),node('small',attention.label,`attention-note ${attention.key}`));
     const progress=node('td'),bars=node('div',null,'check-progress');bars.setAttribute('aria-hidden','true');
-    for(const checked of Object.values(record.checks)) bars.append(node('i',null,checked?'done':''));
-    progress.append(bars,node('small',`${4-pending(record).length}/4 itens conferidos`));
+    for(const key of Object.keys(CHECKS)) bars.append(node('i',null,record.checks?.[key]?'done':''));
+    progress.append(bars,node('small',`${Object.keys(CHECKS).length-pending(record).length}/${Object.keys(CHECKS).length} itens conferidos`));
     const action=node('td'),button=node('button','Abrir guia →','text-button');button.type='button';button.setAttribute('aria-label',`Abrir guia de ${record.fields.paciente}`);button.addEventListener('click',()=>openCase(record.id));action.append(button);
-    tr.className=`stage-row ${record.stage}${record.fields.pendencia?' has-pending':''}${attention.key==='atrasada'?' is-stale':''}`;tr.append(patient,joint,guide,node('td',record.fields.convenio),stage,nextAction,progress,action);tbody.append(tr);
+    tr.className=`stage-row ${record.stage}${hasOperationalPending(record)?' has-pending':''}${attention.key==='atrasada'?' is-stale':''}`;tr.append(patient,joint,guide,node('td',record.fields.convenio),stage,nextAction,progress,action);tbody.append(tr);
   }
   $('#empty').hidden=visible.length>0;
   $('#empty h3').textContent=hasRecords?'Nenhuma guia encontrada':'Nenhum paciente cadastrado';
@@ -144,11 +190,28 @@ function renderDetail() {
   $('#case-protocol').textContent=`GUIA ${record.id.startsWith('demo-')?record.id.toUpperCase():record.id.slice(0,8).toUpperCase()} · VERSÃO ${record.version}`;
   $('#case-guide-number').textContent=record.fields.numeroGuia || 'Ainda não informado';
   $('#case-status').textContent=stageLabel(record.stage);$('#case-status').className=`pill ${record.stage}`;
-  $('#case-guide').value=record.fields.numeroGuia || '';$('#case-scheduled-date').value=record.fields.dataAgendamento || '';$('#case-date').value=applicationDate(record.fields);$('#case-followup').value=record.fields.retornoEm || '';$('#case-condition').value=record.fields.condicaoProcesso || (record.fields.pendencia?'outro':'regular');$('#case-observation').value=record.fields.observacao || '';
+  $('#case-request-document').checked=Boolean(record.fields.pedidoMedicoRecebido);
+  $('#case-card-document').checked=Boolean(record.fields.carteirinhaRecebida);
+  $('#case-patient-document').checked=Boolean(record.fields.documentoPacienteRecebido);
+  $('#case-cid-status').value=record.fields.cidStatus || 'nao_aplica';$('#case-exam-status').value=record.fields.exameStatus || 'nao_aplica';
+  $('#case-guide').value=record.fields.numeroGuia || '';$('#case-authorization-password').value=record.fields.senhaAutorizacao || '';$('#case-operator-protocol').value=record.fields.protocoloOperadora || '';
+  $('#case-operator-status').value=record.fields.situacaoOperadora || (record.stage==='recebido'?'nao_solicitado':record.stage==='solicitado'?'em_analise':'autorizado');
+  $('#case-requested-quantity').value=record.fields.quantidadeSolicitada || '1';$('#case-authorized-quantity').value=record.fields.quantidadeAutorizada || '';
+  $('#case-authorization-expiry').value=record.fields.validadeAutorizacao || '';$('#case-no-expiry').checked=Boolean(record.fields.autorizacaoSemValidade);
+  $('#case-scheduled-date').value=record.fields.dataAgendamento || '';$('#case-date').value=applicationDate(record.fields);$('#case-followup').value=record.fields.retornoEm || '';
+  $('#case-receptionist').value=record.fields.recepcionista || '';$('#case-reception-pickup').value=record.fields.dataHoraRetiradaRecepcao || '';$('#case-reception-return').value=record.fields.dataHoraRetornoAutorizacao || '';
+  $('#case-reception-pending').value=record.fields.pendenciaRecepcao || 'sem_pendencia';$('#case-reception-observation').value=record.fields.observacaoRecepcao || '';
+  $('#case-performed-quantity').value=record.fields.quantidadeRealizada || '';$('#case-materials').value=record.fields.materiaisUtilizados || '';
+  $('#case-condition').value=record.fields.condicaoProcesso || (record.fields.pendencia?'outro':'regular');$('#case-observation').value=record.fields.observacao || '';
   summary($('#case-summary'),record.fields,WORKFLOW_FIELD_LABELS);
   $('#case-steps').replaceChildren();
-  const current=STAGES.findIndex(([key])=>key===record.stage);
-  STAGES.forEach(([key,label],i)=>{const state=i===current?'current':record.stage!=='cancelado'&&i<current?'passed':'';const li=node('li',label,state);if(i===current)li.setAttribute('aria-current','step');$('#case-steps').append(li);});
+  const currentPhase=macroPhase(record.stage),current=MACRO_PHASES.findIndex(phase=>phase.id===currentPhase?.id);
+  MACRO_PHASES.forEach((phase,i)=>{const state=record.stage==='cancelado'?'cancelled':i===current?'current':i<current?'passed':'future';const li=node('li',null,state);li.append(node('b',String(phase.number)),node('span',phase.label),node('small',phase.hint));if(i===current)li.setAttribute('aria-current','step');$('#case-steps').append(li);});
+  for(const section of document.querySelectorAll('.workflow-phase')) {
+    const index=MACRO_PHASES.findIndex(phase=>phase.id===section.dataset.phase);
+    section.className='workflow-phase '+(record.stage==='cancelado'?'cancelled':index===current?'current':index<current?'passed':'future');
+    section.open=index===current || (record.stage==='cancelado'&&index===0);
+  }
   const patientRecords=records.filter(item=>record.fields.prontuario && item.fields.prontuario===record.fields.prontuario).sort((a,b)=>(applicationDate(a.fields)||'9999').localeCompare(applicationDate(b.fields)||'9999'));
   const received=patientRecords.filter(item=>item.stage==='faturamento').length,cancelled=patientRecords.filter(item=>item.stage==='cancelado').length;
   $('#patient-totals').textContent=`${patientRecords.length} processo${patientRecords.length===1?'':'s'} · ${received} entregue${received===1?'':'s'} ao faturamento${cancelled?` · ${cancelled} cancelado${cancelled===1?'':'s'}`:''}`;
@@ -161,7 +224,7 @@ function renderDetail() {
   }
   const editable=canEdit(record,store.role),checks=$('#case-checks');checks.replaceChildren();
   for(const [key,label] of Object.entries(CHECKS)) {
-    const available=canReviewCheck(key,record.stage),item=node('label',null,`check-item${available?'':' locked'}`),input=node('input');input.type='checkbox';input.name=key;input.checked=Boolean(record.checks[key]&&available);input.disabled=!editable||!available;item.append(input,node('span',label));
+    const available=canReviewCheck(key,record.stage),item=node('label',null,`check-item${available?'':' locked'}`),input=node('input');input.type='checkbox';input.name=key;input.checked=Boolean(record.checks?.[key]&&available);input.disabled=!editable||!available;item.append(input,node('span',label));
     if(!available)item.append(node('small','Será liberado na etapa correta.'));checks.append(item);
   }
   $('#save-checks').hidden=!editable;
@@ -169,7 +232,10 @@ function renderDetail() {
   editProfileButton.hidden=!['recepcao','admin'].includes(store.role);
   editCaseButton.hidden=!editable;
   cancelCaseButton.hidden=!editable;
-  $('#case-guide').disabled=$('#case-scheduled-date').disabled=$('#case-date').disabled=$('#case-followup').disabled=$('#case-condition').disabled=$('#case-observation').disabled=!editable;
+  for(const selector of ['#case-request-document','#case-card-document','#case-patient-document','#case-cid-status','#case-exam-status','#case-guide','#case-authorization-password','#case-operator-protocol','#case-operator-status','#case-requested-quantity','#case-authorized-quantity','#case-authorization-expiry','#case-no-expiry','#case-scheduled-date','#case-date','#case-followup','#case-receptionist','#case-reception-pickup','#case-reception-return','#case-reception-pending','#case-reception-observation','#case-performed-quantity','#case-materials','#case-condition','#case-observation'])$(selector).disabled=!editable;
+  if($('#case-no-expiry').checked)$('#case-authorization-expiry').disabled=true;
+  $('#pickup-now').hidden=$('#return-now').hidden=!editable;
+  $('#print-reception-slip').hidden=['recebido','solicitado','cancelado'].includes(record.stage);
   $('#check-help').textContent=record.stage==='faturamento'?'Entrega registrada. A guia permanece disponível para consulta e impressão.':record.stage==='conferencia'?'Marque somente o que já foi conferido pelo setor.':'Os itens serão liberados automaticamente conforme a guia avançar.';
   const next=nextStage(record.stage);
   $('#advance').hidden=!next || !editable;
@@ -195,6 +261,36 @@ async function save(advance=false) {
 }
 $('#case-form').addEventListener('submit',e=>{e.preventDefault();save();});
 $('#case-form').addEventListener('input',updateAdvanceState);$('#case-form').addEventListener('change',updateAdvanceState);
+$('#case-no-expiry').addEventListener('change',()=>{
+  const checked=$('#case-no-expiry').checked;
+  if(checked)$('#case-authorization-expiry').value='';
+  $('#case-authorization-expiry').disabled=checked||!selected||!canEdit(selected,store.role);
+  updateAdvanceState();
+});
+$('#pickup-now').addEventListener('click',()=>{$('#case-reception-pickup').value=localDateTime();updateAdvanceState();$('#case-receptionist').focus();});
+$('#return-now').addEventListener('click',()=>{
+  if(!$('#case-reception-pickup').value){$('#case-message').textContent='Registre primeiro a retirada do processo pela recepção.';$('#case-message').className='message error';$('#case-reception-pickup').focus();return;}
+  $('#case-reception-return').value=localDateTime();updateAdvanceState();
+});
+function buildReceptionSlip(record) {
+  const section=node('section',null,'print-reception');
+  const header=node('header',null,'print-header'),brand=node('div');brand.append(node('strong','AMOT'),node('span','Setor de Autorizações'));
+  const title=node('div');title.append(node('h1','Controle rápido da recepção'),node('p','Grampear junto ao processo físico'));header.append(brand,title);section.append(header);
+  const reference=node('div',null,'slip-reference');
+  reference.append(node('span','Processo '+(record.id.startsWith('demo-')?record.id.toUpperCase():record.id.slice(0,8).toUpperCase())),node('strong','Guia '+(record.fields.numeroGuia||'________________')),node('span',jointLabel(record.fields)+' · '+applicationLabel(record.fields)),node('span','Agendado: '+(record.fields.dataAgendamento?displayDate(record.fields.dataAgendamento):'____/____/______')));
+  section.append(reference);
+  const fields=node('div',null,'slip-fields');
+  for(const label of ['Recepcionista','Retirada — data e hora','Devolução à autorização — data e hora']){const field=node('div');field.append(node('span',label));fields.append(field);}section.append(fields);
+  const list=node('div',null,'slip-checklist');
+  for(const label of ['Check-in realizado','Guia e senha conferidas','Validade conferida','Assinaturas coletadas','Carteirinha e documento conferidos','Material autorizado confirmado'])list.append(node('div','□ '+label));
+  section.append(list);
+  const pending=node('div',null,'slip-pending');pending.append(node('strong','Se houver pendência, marque:'),node('span','□ Assinatura do paciente   □ Assinatura médica   □ Carimbo   □ Documento   □ Outra: ____________________'));section.append(pending);
+  section.append(node('p','Após o atendimento, devolver este processo ao Setor de Autorizações. Não encaminhar diretamente ao faturamento.','slip-alert'));
+  return section;
+}
+$('#print-reception-slip').addEventListener('click',()=>{
+  if(!selected)return;const sheet=$('#print-sheet');sheet.replaceChildren(buildReceptionSlip(selected));window.print();
+});
 $('#advance').addEventListener('click',()=>{if(busy||!selected)return;const readiness=advanceReadiness(selected);if(!readiness.ready){$('#case-message').textContent=readiness.message;$('#case-message').className='message error';if(readiness.focus)$(readiness.focus)?.focus();return;}if(selected.stage==='pronto_faturamento'){detail.close();openBatches(selected.id);return;}save(true);});
 editProfileButton.addEventListener('click',()=>{
   if(!selected)return;
@@ -282,6 +378,7 @@ newForm.elements.articulacao.addEventListener('change',()=>{
 function openNewCase(patient=null) {
   newForm.reset();$('#patient-match').textContent='';
   newForm.elements.dataPedido.value=localDate();
+  newForm.elements.quantidadeSolicitada.value='1';newForm.elements.cidStatus.value='nao_aplica';newForm.elements.exameStatus.value='nao_aplica';
   if(patient) {
     newForm.elements.prontuario.value=patient.prontuario || '';
     newForm.elements.paciente.value=patient.paciente || '';
@@ -340,20 +437,29 @@ function monthName(value) {
 function reportFilter(item,type) {
   if(type==='delivery')return item.stage==='faturamento';
   if(type==='open')return !['faturamento','cancelado'].includes(item.stage);
-  if(type==='pending')return Boolean(item.fields.pendencia);
+  if(type==='pending')return hasOperationalPending(item);
   return true;
 }
 function reportReferenceDate(item,type) {return type==='delivery'?billingDate(item.fields):requestDate(item.fields);}
 function reportTitle(type) {return {complete:'Movimento completo',delivery:'Relação de entrega ao faturamento',open:'Guias ainda não entregues',pending:'Processos com pendência'}[type];}
+function pendingDescription(item) {
+  const details=[];
+  if(item.fields.pendencia)details.push(processLabel(item.fields));
+  if(['pendencia','recurso','negado'].includes(item.fields.situacaoOperadora))details.push(operatorLabel(item.fields));
+  if(item.fields.pendenciaRecepcao&&item.fields.pendenciaRecepcao!=='sem_pendencia')details.push(receptionLabel(item.fields));
+  if(item.fields.observacao)details.push(item.fields.observacao);
+  if(item.fields.observacaoRecepcao)details.push(item.fields.observacaoRecepcao);
+  return details.join(' — ') || 'Sem pendência';
+}
 function reportColumns(type) {
   if(type==='delivery')return [
-    ['Paciente',item=>item.fields.paciente],['Prontuário',item=>item.fields.prontuario||'—'],['Nº da guia',item=>item.fields.numeroGuia||'—'],['Médico',item=>item.fields.executor],['Articulação',item=>jointLabel(item.fields)],['Aplicação',item=>applicationLabel(item.fields)],['Realização',item=>applicationDate(item.fields)?displayDate(applicationDate(item.fields)):'—'],['Lote',item=>item.fields.loteReferencia||'—']
+    ['Paciente',item=>item.fields.paciente],['Prontuário',item=>item.fields.prontuario||'—'],['Guia / senha',item=>[item.fields.numeroGuia,item.fields.senhaAutorizacao].filter(Boolean).join(' / ')||'—'],['Médico',item=>item.fields.executor],['Articulação',item=>jointLabel(item.fields)],['Aplicação',item=>applicationLabel(item.fields)],['Qtd.',item=>item.fields.quantidadeRealizada||item.fields.quantidadeAutorizada||'—'],['Validade',item=>item.fields.validadeAutorizacao?displayDate(item.fields.validadeAutorizacao):item.fields.autorizacaoSemValidade?'Não informada':'—'],['Realização',item=>applicationDate(item.fields)?displayDate(applicationDate(item.fields)):'—'],['Lote',item=>item.fields.loteReferencia||'—']
   ];
   if(['open','pending'].includes(type))return [
-    ['Paciente',item=>item.fields.paciente],['Prontuário',item=>item.fields.prontuario||'—'],['Guia',item=>item.fields.numeroGuia||'—'],['Médico',item=>item.fields.executor],['Articulação',item=>jointLabel(item.fields)],['Aplicação',item=>applicationLabel(item.fields)],['Pedido',item=>displayDate(requestDate(item.fields))],['Situação',item=>stageLabel(item.stage)],['Próxima ação',item=>nextActionLabel(item.stage)],['Retorno',item=>item.fields.retornoEm?displayDate(item.fields.retornoEm):'—'],['Pendência / observação',item=>item.fields.pendencia?[processLabel(item.fields),item.fields.observacao].filter(Boolean).join(' — '):'Sem pendência']
+    ['Paciente',item=>item.fields.paciente],['Prontuário',item=>item.fields.prontuario||'—'],['Guia',item=>item.fields.numeroGuia||'—'],['Médico',item=>item.fields.executor],['Articulação',item=>jointLabel(item.fields)],['Aplicação',item=>applicationLabel(item.fields)],['Pedido',item=>displayDate(requestDate(item.fields))],['Situação',item=>stageLabel(item.stage)],['Próxima ação',item=>nextActionLabel(item.stage)],['Retorno',item=>item.fields.retornoEm?displayDate(item.fields.retornoEm):'—'],['Pendência / observação',pendingDescription]
   ];
   return [
-    ['Paciente',item=>item.fields.paciente],['Prontuário',item=>item.fields.prontuario||'—'],['Guia',item=>item.fields.numeroGuia||'—'],['Médico',item=>item.fields.executor],['Articulação',item=>jointLabel(item.fields)],['Aplicação',item=>applicationLabel(item.fields)],['Pedido',item=>displayDate(requestDate(item.fields))],['Solicitação',item=>item.fields.dataSolicitacao?displayDate(item.fields.dataSolicitacao):'—'],['Autorização',item=>item.fields.dataAutorizacao?displayDate(item.fields.dataAutorizacao):'—'],['Agendada',item=>item.fields.dataAgendamento?displayDate(item.fields.dataAgendamento):'—'],['Realização',item=>applicationDate(item.fields)?displayDate(applicationDate(item.fields)):'—'],['Faturamento',item=>billingDate(item.fields)?displayDate(billingDate(item.fields)):'—'],['Situação',item=>stageLabel(item.stage)]
+    ['Paciente',item=>item.fields.paciente],['Prontuário',item=>item.fields.prontuario||'—'],['Guia / senha',item=>[item.fields.numeroGuia,item.fields.senhaAutorizacao].filter(Boolean).join(' / ')||'—'],['Médico',item=>item.fields.executor],['Articulação',item=>jointLabel(item.fields)],['Aplicação',item=>applicationLabel(item.fields)],['Qtd.',item=>item.fields.quantidadeRealizada||item.fields.quantidadeAutorizada||item.fields.quantidadeSolicitada||'—'],['Pedido',item=>displayDate(requestDate(item.fields))],['Solicitação',item=>item.fields.dataSolicitacao?displayDate(item.fields.dataSolicitacao):'—'],['Autorização',item=>item.fields.dataAutorizacao?displayDate(item.fields.dataAutorizacao):'—'],['Agendada',item=>item.fields.dataAgendamento?displayDate(item.fields.dataAgendamento):'—'],['Realização',item=>applicationDate(item.fields)?displayDate(applicationDate(item.fields)):'—'],['Faturamento',item=>billingDate(item.fields)?displayDate(billingDate(item.fields)):'—'],['Situação',item=>stageLabel(item.stage)]
   ];
 }
 function buildReportGroup(insurer,items,month,type,batch=null) {

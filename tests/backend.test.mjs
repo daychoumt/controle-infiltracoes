@@ -6,11 +6,11 @@ import {handle} from '../worker/index.mjs';
 import {authenticate} from '../worker/auth.mjs';
 import {Repository,SQL} from '../worker/repository.mjs';
 import {emptyChecks} from '../assets/domain.js';
-const fields={prontuario:'10021',paciente:'Paciente fictício',convenio:'Particular',medicacao:'',articulacao:'Joelho',lado:'Direito',numeroAplicacao:'1',pedidoRacimed:'RC-100',condicaoProcesso:'regular',observacao:'',aplicacao:'1ª aplicação · Joelho direito',dataPedido:'2025-12-20',dataAgendamento:'2026-01-01',dataAplicacao:'2026-01-01',data:'2026-01-01',executor:'Dr. Exemplo A',atendente:'Nome enviado pelo navegador'};
+const fields={prontuario:'10021',paciente:'Paciente fictício',convenio:'Particular',medicacao:'',articulacao:'Joelho',lado:'Direito',numeroAplicacao:'1',pedidoRacimed:'RC-100',condicaoProcesso:'regular',observacao:'',aplicacao:'1ª aplicação · Joelho direito',dataPedido:'2025-12-20',dataAgendamento:'2026-01-01',dataAplicacao:'2026-01-01',data:'2026-01-01',executor:'Dr. Exemplo A',atendente:'Nome enviado pelo navegador',pedidoMedicoRecebido:true,carteirinhaRecebida:true,documentoPacienteRecebido:true,cidStatus:'nao_aplica',exameStatus:'conferido',senhaAutorizacao:'SENHA-100',protocoloOperadora:'PROTOCOLO-100',validadeAutorizacao:'2026-12-31',quantidadeSolicitada:'1',quantidadeAutorizada:'1',recepcionista:'Recepcionista teste',dataHoraRetiradaRecepcao:'2026-01-01T08:00',pendenciaRecepcao:'sem_pendencia',quantidadeRealizada:'1'};
 const env={FIREBASE_PROJECT_ID:'clinic-test',FIREBASE_WEB_API_KEY:'public-test-config',DB:{},ALLOWED_ORIGINS:'https://clinic.example',STAFF_ROLES:JSON.stringify({'staff-1':'recepcao'}),REFERENCE_DATA:JSON.stringify({convenios:['Particular'],medicacoes:['Medicação Exemplo A'],medicos:['Dr. Exemplo A']})};
 const user={uid:'staff-1',role:'recepcao',name:'Maria Autorizações'};
 const id='10000000-0000-4000-8000-000000000001';
-const all={autorizada:true,assinada:true,execucao:true,documentos:true};
+const all={autorizada:true,validade:true,assinada:true,execucao:true,documentos:true,compatibilidade:true,registroCompleto:true};
 function request(path,method='GET',body,extra={}) {return new Request('https://worker.example'+path,{method,headers:{Origin:'https://clinic.example',Authorization:'Bearer test','Content-Type':'application/json',...extra},body:body===undefined?undefined:JSON.stringify(body)});}
 function fixture() {
   const db=new DatabaseSync(':memory:');

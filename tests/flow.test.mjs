@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {transition,emptyChecks,validateFields,validateCaseFields,validDate,jointLabel,attentionState,canReviewCheck} from '../assets/domain.js';
+import {transition,emptyChecks,validateFields,validateCaseFields,validDate,jointLabel,attentionState,canReviewCheck,macroPhase,hasOperationalPending} from '../assets/domain.js';
 import {DemoStore} from '../assets/store.js';
-const fields={prontuario:'AB-102',paciente:'Paciente de teste',convenio:'Particular',medicacao:'',articulacao:'Joelho',lado:'Direito',numeroAplicacao:'1',pedidoRacimed:'RC-1',aplicacao:'1ª aplicação · Joelho direito',numeroGuia:'GUIA-1',pendencia:false,condicaoProcesso:'regular',observacao:'',dataPedido:'2025-12-20',dataAgendamento:'2026-01-01',dataAplicacao:'2026-01-01',data:'2026-01-01',executor:'Dr. Exemplo A',atendente:'Autorizações'};
-const all={autorizada:true,assinada:true,execucao:true,documentos:true};
+const workflow={pedidoMedicoRecebido:true,carteirinhaRecebida:true,documentoPacienteRecebido:true,cidStatus:'nao_aplica',exameStatus:'conferido',situacaoOperadora:'nao_solicitado',senhaAutorizacao:'SENHA-1',protocoloOperadora:'PROTOCOLO-1',validadeAutorizacao:'2026-12-31',autorizacaoSemValidade:false,quantidadeSolicitada:'1',quantidadeAutorizada:'1',recepcionista:'Recepcionista teste',dataHoraRetiradaRecepcao:'2026-01-01T08:00',dataHoraRetornoAutorizacao:'',pendenciaRecepcao:'sem_pendencia',observacaoRecepcao:'',quantidadeRealizada:'1',materiaisUtilizados:'Material de teste'};
+const fields={prontuario:'AB-102',paciente:'Paciente de teste',convenio:'Particular',medicacao:'',articulacao:'Joelho',lado:'Direito',numeroAplicacao:'1',pedidoRacimed:'RC-1',aplicacao:'1ª aplicação · Joelho direito',numeroGuia:'GUIA-1',pendencia:false,condicaoProcesso:'regular',observacao:'',dataPedido:'2025-12-20',dataAgendamento:'2026-01-01',dataAplicacao:'2026-01-01',data:'2026-01-01',executor:'Dr. Exemplo A',atendente:'Autorizações',...workflow};
+const all={autorizada:true,validade:true,assinada:true,execucao:true,documentos:true,compatibilidade:true,registroCompleto:true};
 const record=(stage='recebido',checks=emptyChecks())=>({fields,stage,checks,version:1});
-const workflowFields={prontuario:'ab-102',paciente:'Paciente de teste',convenio:'Particular',medicacao:'',articulacao:'Joelho',lado:'Direito',numeroAplicacao:'2',pedidoRacimed:'RC-9',condicaoProcesso:'regular',observacao:'',dataPedido:'2025-12-20',dataAplicacao:'2026-01-01',executor:'Dr. Exemplo A',atendente:'Autorizações'};
+const workflowFields={prontuario:'ab-102',paciente:'Paciente de teste',convenio:'Particular',medicacao:'',articulacao:'Joelho',lado:'Direito',numeroAplicacao:'2',pedidoRacimed:'RC-9',condicaoProcesso:'regular',observacao:'',dataPedido:'2025-12-20',dataAplicacao:'2026-01-01',executor:'Dr. Exemplo A',atendente:'Autorizações',...workflow};
 test('normaliza os campos e rejeita datas inexistentes',()=>{
   assert.equal(validateFields({...fields,paciente:'  Ana  '}).paciente,'Ana');
   assert.equal(validDate('2026-02-30'),false);assert.equal(validDate('2028-02-29'),true);
@@ -33,6 +34,35 @@ test('rejeita campos obrigatórios, enumerações e tamanho inválidos',()=>{
 test('não registra autorização sem confirmação ou número da guia',()=>{
   assert.throws(()=>transition({...record('solicitado'),fields:{...fields,numeroGuia:''}},{version:1,stage:'autorizado'},'recepcao'),{status:400});
 });
+test('fluxo visual agrupa os estados internos nas cinco fases',()=>{
+  assert.equal(macroPhase('recebido').id,'entrada');assert.equal(macroPhase('solicitado').id,'autorizacao');
+  assert.equal(macroPhase('agendado').id,'recepcao');assert.equal(macroPhase('realizado').id,'procedimento');assert.equal(macroPhase('pronto_faturamento').id,'faturamento');
+});
+test('entrada só segue com documentos essenciais conferidos',()=>{
+  assert.throws(()=>transition({...record(),fields:{...fields,carteirinhaRecebida:false}},{version:1,stage:'solicitado'},'recepcao'),error=>/carteirinha/i.test(error.message));
+  assert.equal(transition(record(),{version:1,stage:'solicitado'},'recepcao').fields.situacaoOperadora,'em_analise');
+});
+test('autorização exige senha ou protocolo, validade e quantidade',()=>{
+  const requested={...record('solicitado'),fields:{...fields,senhaAutorizacao:'',protocoloOperadora:'',validadeAutorizacao:'',quantidadeAutorizada:''}};
+  assert.throws(()=>transition(requested,{version:1,stage:'autorizado'},'recepcao'),error=>/senha|protocolo/i.test(error.message));
+  const authorized=transition({...requested,fields:{...requested.fields,senhaAutorizacao:'S-9',autorizacaoSemValidade:true,quantidadeAutorizada:'1'}},{version:1,stage:'autorizado'},'recepcao');
+  assert.equal(authorized.fields.situacaoOperadora,'autorizado');
+});
+test('autorização vencida e quantidade realizada acima da autorizada são bloqueadas',()=>{
+  const requested={...record('solicitado'),fields:{...fields,validadeAutorizacao:'2020-01-01'}};
+  assert.throws(()=>transition(requested,{version:1,stage:'autorizado'},'recepcao'),error=>/vencida/i.test(error.message));
+  assert.throws(()=>validateCaseFields({...workflowFields,quantidadeAutorizada:'1',quantidadeRealizada:'2'}),error=>/quantidade realizada/i.test(error.message));
+});
+test('agendamento respeita a validade e realização registra o controle da recepção',()=>{
+  const authorized={...record('autorizado',{...emptyChecks(),autorizada:true}),fields:{...fields,dataAgendamento:'2027-01-01'}};
+  assert.throws(()=>transition(authorized,{version:1,stage:'agendado'},'recepcao'),error=>/validade/i.test(error.message));
+  const noReception={...record('agendado',{...emptyChecks(),autorizada:true}),fields:{...fields,recepcionista:'',dataHoraRetiradaRecepcao:''}};
+  assert.throws(()=>transition(noReception,{version:1,stage:'realizado'},'recepcao'),error=>/recepção/i.test(error.message));
+});
+test('pendências da operadora e da recepção entram na fila prioritária',()=>{
+  assert.equal(hasOperationalPending({...record('solicitado'),fields:{...fields,situacaoOperadora:'recurso'}}),true);
+  assert.equal(attentionState({...record('conferencia'),fields:{...fields,pendenciaRecepcao:'assinatura_medico'}},'2026-01-02').key,'pendencia');
+});
 test('não permite pular etapas',()=>assert.throws(()=>transition(record('recebido',all),{version:1,stage:'agendado'},'admin'),{status:400}));
 test('agendamento usa a data agendada sem exigir a data da realização',()=>{
   const current={...record('autorizado',{...emptyChecks(),autorizada:true}),fields:{...fields,dataAgendamento:'',dataAplicacao:'',data:''}};
@@ -47,7 +77,7 @@ test('realização ausente ou futura apresenta uma orientação específica',()=
 test('conferências ficam bloqueadas até a etapa correta',()=>{
   assert.equal(canReviewCheck('autorizada','autorizado'),true);assert.equal(canReviewCheck('execucao','agendado'),false);assert.equal(canReviewCheck('documentos','conferencia'),true);
   const cleaned=transition(record('agendado',all),{version:1},'recepcao');
-  assert.deepEqual(cleaned.checks,{autorizada:true,assinada:false,execucao:false,documentos:false});
+  assert.deepEqual(cleaned.checks,{...emptyChecks(),autorizada:true});
 });
 test('todos os documentos são necessários para deixar a guia pronta',()=>{
   for(const missing of Object.keys(all))assert.throws(()=>transition(record('conferencia',{...all,[missing]:false}),{version:1,stage:'pronto_faturamento'},'recepcao'),{status:400});

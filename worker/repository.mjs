@@ -1,4 +1,4 @@
-import {problem,eventLabel} from '../assets/domain.js';
+import {problem,eventLabel,normalizeChecks} from '../assets/domain.js';
 // Each write and its audit event commit together. The version predicate protects
 // against two staff members overwriting each other's work.
 export const SQL={
@@ -23,7 +23,7 @@ export const SQL={
 };
 const legacyStage=stage=>({recebido:'autorizacao',solicitado:'autorizacao',autorizado:'agendado',agendado:'agendado',realizado:'realizado',conferencia:'faturamento',pronto_faturamento:'faturamento',faturamento:'concluido',cancelado:'autorizacao'})[stage] || 'autorizacao';
 const legacyStageV2=stage=>({recebido:'recebido',solicitado:'solicitado',autorizado:'agendado',agendado:'agendado',realizado:'realizado',conferencia:'conferencia',pronto_faturamento:'conferencia',faturamento:'faturamento',cancelado:'recebido'})[stage] || 'recebido';
-const decode=row=>({id:row.id,fields:JSON.parse(row.payload),stage:row.stage_v3 || row.stage_v2 || ({autorizacao:'solicitado',concluido:'faturamento'}[row.stage] || row.stage),checks:JSON.parse(row.checks),version:row.version,createdAt:row.created_at,updatedAt:row.updated_at,stageChangedAt:row.stage_changed_at || row.updated_at});
+const decode=row=>({id:row.id,fields:JSON.parse(row.payload),stage:row.stage_v3 || row.stage_v2 || ({autorizacao:'solicitado',concluido:'faturamento'}[row.stage] || row.stage),checks:normalizeChecks(JSON.parse(row.checks)),version:row.version,createdAt:row.created_at,updatedAt:row.updated_at,stageChangedAt:row.stage_changed_at || row.updated_at});
 const decodeBatch=row=>({id:row.id,reference:row.reference,competencia:row.competencia,convenio:row.convenio,recebidoPor:row.recebido_por,observacao:row.observacao,createdAt:row.created_at,createdBy:row.created_by,total:Number(row.total || 0)});
 const duplicateProcess=error=>/idx_cases_active_process/i.test(String(error?.message || error));
 export class Repository {

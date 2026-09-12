@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "amot-infiltracoes",
+  "main": "worker/index.mjs",
+  "compatibility_date": "2026-09-01",
+  "workers_dev": true,
+  "keep_vars": true,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "amot_db",
+      "database_id": "4ef893b2-564a-4dd6-8209-75b441c31d0f",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "observability": {
+    "enabled": false
+  }
+}

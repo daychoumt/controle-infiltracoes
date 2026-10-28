@@ -2,12 +2,13 @@ import {problem,validateCaseFields,emptyChecks,transition,ROLES,localDate} from 
 import {authenticate} from './auth.mjs';
 import {Repository} from './repository.mjs';
 import {parseReferences} from './references.mjs';
+import {agendaRoute} from './agenda.mjs';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-async function readJson(request) {
+async function readJson(request,limit=8192) {
   if(!request.headers.get('Content-Type')?.startsWith('application/json'))throw problem(415,'Envie os dados em JSON.');
   const reader=request.body?.getReader();if(!reader)throw problem(400,'Dados ausentes.');
   let bytes=0,chunks=[];
-  while(true){const {value,done}=await reader.read();if(done)break;bytes+=value.byteLength;if(bytes>8192){await reader.cancel();throw problem(413,'Registro acima do limite de tamanho.');}chunks.push(value);}
+  while(true){const {value,done}=await reader.read();if(done)break;bytes+=value.byteLength;if(bytes>limit){await reader.cancel();throw problem(413,'Registro acima do limite de tamanho.');}chunks.push(value);}
   try{return JSON.parse(await new Blob(chunks).text());}catch{throw problem(400,'Dados inválidos.');}
 }
 export async function handle(request,env,dependencies={}) {
@@ -23,11 +24,13 @@ export async function handle(request,env,dependencies={}) {
   if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{...headers,'Access-Control-Allow-Methods':'GET, POST, PATCH, OPTIONS','Access-Control-Allow-Headers':'Authorization, Content-Type','Access-Control-Max-Age':'600'}});
   try {
     const url=new URL(request.url),match=/^\/cases\/([\da-f-]+)$/i.exec(url.pathname),batchMatch=/^\/batches\/([\da-f-]+)$/i.exec(url.pathname);
-    if(!['/session','/references','/patient','/patient/lookup','/cases','/batches'].includes(url.pathname) && !match && !batchMatch)throw problem(404,'Rota não encontrada.');
+    const agendaPath=['/agenda/courses','/agenda/closing'].includes(url.pathname)||/^\/agenda\/courses\/[\da-f-]+$/i.test(url.pathname);
+    if(!['/session','/references','/patient','/patient/lookup','/cases','/batches'].includes(url.pathname) && !match && !batchMatch && !agendaPath)throw problem(404,'Rota não encontrada.');
     if(!env.FIREBASE_PROJECT_ID || !env.FIREBASE_WEB_API_KEY || !env.DB || !allowed.length)throw problem(503,'O painel da equipe ainda precisa ser configurado.');
     const token=/^Bearer (\S+)$/.exec(request.headers.get('Authorization') || '')?.[1];
     if(!token || token.length>8192)throw problem(401,'Entre com sua conta da equipe.');
     const user=await (dependencies.authenticate || authenticate)(token,env);
+    if(agendaPath){const result=await agendaRoute(request,url,env,user,readJson,dependencies);return reply(result.status,result.body);}
     const repository=dependencies.repository || new Repository(env.DB);
     if(url.pathname==='/session' && request.method==='GET')return reply(200,{role:user.role,name:user.name || ROLES[user.role]});
     if(url.pathname==='/references' && request.method==='GET')return reply(200,parseReferences(env.REFERENCE_DATA));

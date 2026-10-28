@@ -3,7 +3,7 @@ import {join,dirname} from 'node:path';
 import {execFileSync} from 'node:child_process';
 const root=new URL('../',import.meta.url);
 for(const folder of ['assets','worker','tests','scripts'])for(const file of readdirSync(new URL(folder+'/',root)))if(/\.(mjs|js)$/.test(file))execFileSync(process.execPath,['--check',new URL(folder+'/'+file,root).pathname]);
-for(const file of ['index.html','painel.html']) {
+for(const file of ['index.html','painel.html','agenda.html']) {
   const html=readFileSync(new URL(file,root),'utf8');
   const ids=[...html.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);
   if(new Set(ids).size!==ids.length)throw new Error(`${file}: IDs duplicados`);

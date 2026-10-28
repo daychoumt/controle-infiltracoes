@@ -1,6 +1,19 @@
 # AMOT · Gestão de infiltrações
 
-Controle interno do setor de autorizações para acompanhar cada guia, do pedido recebido à entrega ao faturamento, sem depender de cadernos.
+Agenda do setor de autorizações para organizar as solicitações de visco por paciente, articulação, lado e aplicação. A entrada principal abre a agenda; o controle completo de guias e faturamento continua em `painel.html`.
+
+## Agenda simples e fechamento do dia
+
+- **Agenda:** solicitações de hoje, atrasadas, próximos sete dias e envios registrados hoje. As pendências não desaparecem ao fechar o dia.
+- **Registrar o dia:** identifique o paciente uma vez, marque as articulações/lados realmente atendidos, informe a aplicação e registre o que já foi enviado ou a data do lembrete.
+- **Pacientes:** histórico por lado, com as três aplicações, data real da execução, data real do envio, número de guia e observação. Encerrar um acompanhamento preserva seu histórico e permite reabri-lo.
+- **Fechar o dia:** revise aplicações, envios, pendências e próximo dia. O fechamento mantém uma fotografia das versões conferidas; alterações posteriores pedem nova conferência.
+- **Intervalo:** a previsão da aplicação seguinte parte da data real da anterior no mesmo lado. No exemplo de aplicação bilateral em 28/10 com envio direito em 28/10 e esquerdo em 31/10, o intervalo de sete dias chega a 04/11 para ambos. A data de lembrete de cada solicitação pode ser posterior. A terceira só ganha cálculo pela segunda quando sua realização é informada.
+- **Datas honestas:** lembrete não marca solicitação como enviada ou aplicação como realizada. Previsões sem a realização anterior ficam identificadas; divergências do histórico são preservadas e destacadas para conferência. O intervalo informado é organização interna, não validação automática de cobertura pela operadora.
+- **Lembretes:** avisos genéricos no navegador a partir das 08h e de fechamento a partir das 16h45, apenas com a agenda aberta e sessão da equipe ativa. O botão de calendário exporta um `.ics` sem nomes, prontuários, guias ou detalhes clínicos; ele representa as datas no momento da exportação e deve ser atualizado manualmente quando mudarem. Não há envio de WhatsApp, e-mail ou push com a página fechada.
+- **Persistência:** demonstração apenas em memória; a equipe usa os novos endpoints protegidos `/agenda/courses` e `/agenda/closing`, após aplicar a migração `0007_agenda.sql`. A agenda é independente dos processos antigos e não migra ou altera guias automaticamente.
+
+O código público continua com `assets/config.js` vazio. A publicação da interface **não ativa a base real**: é necessário implantar o Worker atualizado, aplicar as migrações no D1 e configurar Firebase, origens e equipe conforme `docs/BACKEND.md`. Nenhum nome ou registro clínico é salvo no `localStorage`; somente a preferência de permitir notificações pode ser guardada nele.
 
 **[Explorar a demonstração](https://xn--amotinfiltrao-7eb3d.online/painel.html?demo=1)** · **[Painel da clínica](https://xn--amotinfiltrao-7eb3d.online/)** · **[Configurar o backend](docs/BACKEND.md)** · **[Segurança operacional](docs/SECURITY.md)**
 

@@ -1,6 +1,6 @@
 # AMOT · Gestão de infiltrações
 
-Agenda do setor de autorizações para organizar as solicitações de visco por paciente, articulação, lado e aplicação. A entrada principal abre a agenda; o controle completo de guias e faturamento continua em `painel.html`.
+Agenda do setor de autorizações para organizar as solicitações de visco por paciente, articulação, lado e aplicação. A entrada principal e `agenda.html` encaminham para a agenda privada em [AMOT · Agenda de solicitações](https://amot-agenda-visco-thalys.handycod10.chatgpt.site), com banco D1 e autenticação ChatGPT. O controle antigo de guias e faturamento continua em `painel.html`.
 
 ## Agenda simples e fechamento do dia
 
@@ -11,11 +11,11 @@ Agenda do setor de autorizações para organizar as solicitações de visco por 
 - **Intervalo:** a previsão da aplicação seguinte parte da data real da anterior no mesmo lado. No exemplo de aplicação bilateral em 28/10 com envio direito em 28/10 e esquerdo em 31/10, o intervalo de sete dias chega a 04/11 para ambos. A data de lembrete de cada solicitação pode ser posterior. A terceira só ganha cálculo pela segunda quando sua realização é informada.
 - **Datas honestas:** lembrete não marca solicitação como enviada ou aplicação como realizada. Previsões sem a realização anterior ficam identificadas; divergências do histórico são preservadas e destacadas para conferência. O intervalo informado é organização interna, não validação automática de cobertura pela operadora.
 - **Lembretes:** avisos genéricos no navegador a partir das 08h e de fechamento a partir das 16h45, apenas com a agenda aberta e sessão da equipe ativa. O botão de calendário exporta um `.ics` sem nomes, prontuários, guias ou detalhes clínicos; ele representa as datas no momento da exportação e deve ser atualizado manualmente quando mudarem. Não há envio de WhatsApp, e-mail ou push com a página fechada.
-- **Persistência:** demonstração apenas em memória; a equipe usa os novos endpoints protegidos `/agenda/courses` e `/agenda/closing`, após aplicar a migração `0007_agenda.sql`. A agenda é independente dos processos antigos e não migra ou altera guias automaticamente.
+- **Persistência:** os lançamentos da agenda são feitos exclusivamente no Site privado com banco D1. O endereço antigo não aceita mais lançamentos de agenda em memória. A versão real confirma cada gravação por uma nova leitura do servidor. O código legado de guias continua independente e não migra ou altera registros automaticamente.
 
-O código público continua com `assets/config.js` vazio. A publicação da interface **não ativa a base real**: é necessário implantar o Worker atualizado, aplicar as migrações no D1 e configurar Firebase, origens e equipe conforme `docs/BACKEND.md`. Nenhum nome ou registro clínico é salvo no `localStorage`; somente a preferência de permitir notificações pode ser guardada nele.
+O painel legado de guias continua com `assets/config.js` vazio. Para ativar o backend desse painel: é necessário implantar o Worker atualizado, aplicar as migrações no D1 e configurar Firebase, origens e equipe conforme `docs/BACKEND.md`. Nenhum nome ou registro clínico é salvo no `localStorage`; somente a preferência de permitir notificações pode ser guardada nele.
 
-**[Explorar a demonstração](https://xn--amotinfiltrao-7eb3d.online/painel.html?demo=1)** · **[Painel da clínica](https://xn--amotinfiltrao-7eb3d.online/)** · **[Configurar o backend](docs/BACKEND.md)** · **[Segurança operacional](docs/SECURITY.md)**
+**[Explorar a demonstração](https://xn--amotinfiltrao-7eb3d.online/painel.html?demo=1)** · **[Agenda privada](https://amot-agenda-visco-thalys.handycod10.chatgpt.site)** · **[Configurar o backend](docs/BACKEND.md)** · **[Segurança operacional](docs/SECURITY.md)**
 
 ## O problema
 
